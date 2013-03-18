@@ -68,7 +68,12 @@ sub generate_gff_output {
 
     print_gff_line( \%design_data );
 
-    for my $oligo ( qw( g5 u5 d3 g3 ) ) {
+
+    my @oligo_types = $design->design_type_id eq 'conditional'        ? qw( g5 u5 u3 d5 d3 g3 )
+                    : $design->design_type_id =~ /deletion|insertion/ ? qw( g5 u5 d3 g3 )
+                    :                                           ();
+
+    for my $oligo ( @oligo_types ) {
         generate_oligo_gff_output( $oligo, $default_locus );
     }
 }
@@ -119,8 +124,6 @@ design_oligo_gff_data.pl[options] gene_design_list.csv
 Expects a csv file, 2 values for each row, first is gene name, second design_id.
 
 Outputs gff data to STDOUT.
-
-NOTE: Only works for deletion / insertion designs currently
 
 =head1 AUTHOR
 
