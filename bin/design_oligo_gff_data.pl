@@ -34,14 +34,13 @@ frame
 group
 );
 
-my %designs = map { split /,/ } map { chomp; $_ } slurp( $ARGV[0] );
+my @designs = map { chomp; $_ } slurp( $ARGV[0] );
 
 print_gff_line( { map{ $_ => ucfirst($_) } @FIELDS } );
 
-for my $gene ( keys %designs ) {
-    my $design_id = $designs{$gene};
+for my $design_id ( @designs ) {
     Log::Log4perl::NDC->push( $design_id );
-    INFO( "Generate gff data for design $design_id, gene $gene" );
+    INFO( "Generate gff data for design $design_id" );
 
     my $design = $model->retrieve_design( { id => $design_id } );
     unless( $design ) {
@@ -49,15 +48,18 @@ for my $gene ( keys %designs ) {
         next;
     }
 
-    generate_gff_output( $design, $gene );
+    generate_gff_output( $design );
 
     Log::Log4perl::NDC->remove;
 }
 
 sub generate_gff_output {
-    my ( $design, $gene ) = @_;
+    my ( $design ) = @_;
 
     my $default_locus = $design->default_locus;
+
+    my @gene_ids = map{ $_->gene_id } $design->genes;
+    my $gene = join ' ', @gene_ids; # probably just one gene id here
 
     my %design_data = (
         seqname => 'chr' . $default_locus->chr_name,
@@ -121,7 +123,7 @@ design_oligo_gff_data.pl[options] gene_design_list.csv
 
 =head1 DESCRIPTION
 
-Expects a csv file, 2 values for each row, first is gene name, second design_id.
+Expects a file, with a design id on each row.
 
 Outputs gff data to STDOUT.
 
