@@ -4,9 +4,10 @@
 
 printf "Modifying Dre recombinase for CEP plates\n\n"
 
-printf "Adding Dre recombinase to CEP plates <= 26...\n"
 
-add_dre_plate_names=(
+printf "Removing Dre recombinase from CEP plates > 26...\n"
+
+remove_dre_plate_names=(
 "CEP00001"
 "CEP00002"
 "CEP00003"
@@ -32,19 +33,6 @@ add_dre_plate_names=(
 "CEP00024"
 "CEP00025"
 "CEP00026"
-)
-
-plate_counter=0
-for plate in ${add_dre_plate_names[*]}
-do
-    printf "\n==> Plate No. %d: %s\n\n" `expr $plate_counter + 1` $plate
-    perl add_dre.pl $plate
-    let plate_counter++
-done
-
-printf "Removing Dre recombinase from CEP plates > 26...\n"
-
-remove_dre_plate_names=(
 "CEP00027"
 "CEP00028"
 "CEP00029"
@@ -85,4 +73,41 @@ do
     let plate_counter++
 done
 
+printf "Adding Dre recombinase to CEP plates <= 26...\n"
+
+add_dre_plate_names=(
+"CEP00001"
+"CEP00002"
+"CEP00003"
+"CEP00005"
+"CEP00006"
+"CEP00007"
+"CEP00008"
+"CEP00009"
+"CEP00010"
+"CEP00011"
+"CEP00012"
+"CEP00013"
+"CEP00014"
+"CEP00015"
+"CEP00016"
+"CEP00017"
+"CEP00018"
+"CEP00019"
+"CEP00020"
+"CEP00021"
+"CEP00022"
+"CEP00023"
+"CEP00024"
+"CEP00025"
+"CEP00026"
+)
+
+plate_counter=0
+for plate in ${add_dre_plate_names[*]}
+do
+    printf "\n==> Plate No. %d: %s\n\n" `expr $plate_counter + 1` $plate
+    perl add_dre.pl $plate
+    let plate_counter++
+done
 
