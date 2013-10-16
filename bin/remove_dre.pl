@@ -61,7 +61,9 @@ sub modify_plate {
                     say '.. clone_pick: has recombinase ' . $child->process_recombinases->first->recombinase_id;
 
                     # update process type to rearray and delete the recombinase at this point
-                    remove_dre( $model, $child );
+                    if ( $child->process_recombinases->first->recombinase_id eq 'Dre' ) {
+                        remove_dre( $model, $child );
+                    }
                 }
             }
         }
