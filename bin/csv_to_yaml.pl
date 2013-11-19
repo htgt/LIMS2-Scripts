@@ -12,11 +12,11 @@ my $log_level = $WARN;
 GetOptions(
     'help'          => sub { pod2usage( -verbose => 1 ) },
     'man'           => sub { pod2usage( -verbose => 2 ) },
-    'file=s'        => \my $file,
 ) or pod2usage(2);
 
 Log::Log4perl->easy_init( { level => $log_level, layout => '%p %x %m%n' } );
 
+my $file = $ARGV[0];
 LOGDIE( 'Must specify a input file' ) unless $file;
 
 my $input_csv = Text::CSV->new();
