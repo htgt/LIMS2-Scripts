@@ -52,6 +52,11 @@ sub get_ensembl_gene {
         DEBUG("Found multiple EnsEMBL genes for $hgnc_name");
 
         my @filtered_genes = grep{ $_->external_name eq $hgnc_name } @genes;
+        for my $gene ( @genes ) {
+            DEBUG($gene->external_name );
+            DEBUG($gene->stable_id );
+
+        }
         unless( @filtered_genes ) {
             WARN('None of the genes have same HGNC name');
             return;
