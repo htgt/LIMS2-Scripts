@@ -72,6 +72,7 @@ my $sql_result_5_prime =  $model->schema->storage->dbh_do(
          $sth->fetchall_arrayref({
              'ensembl_exon_id' => 1,
              'marker_symbol' => 1,
+             'exon_rank' => 1,
              'crispr_pair_id' => 1,
              'left_diff' => 1,
              'right_diff' => 1,
@@ -104,6 +105,7 @@ my $sql_result_3_prime =  $model->schema->storage->dbh_do(
          $sth->fetchall_arrayref({
              'ensembl_exon_id' => 1,
              'marker_symbol' => 1,
+             'exon_rank' => 1,
              'crispr_pair_id' => 1,
              'left_diff' => 1,
              'right_diff' => 1,
@@ -132,17 +134,18 @@ my $clip;
 my @headers_5_prime =  (qw/
             ensembl_exon_id
             marker_symbol
+            exon_rank
             crispr_pair_id
             left_diff
             right_diff
             pair_length
-            spacer
             left_window
             right_window
             left_crispr_seq
             right_crispr_seq
             exon_start
             exon_length
+            spacer
             L0
             L1
             L2
@@ -153,17 +156,18 @@ my @headers_5_prime =  (qw/
 my @headers_3_prime = (qw/
             ensembl_exon_id
             marker_symbol
+            exon_rank
             crispr_pair_id
             left_diff
             right_diff
             pair_length
-            spacer
             left_window
             right_window
             left_crispr_seq
             right_crispr_seq
             exon_end
             exon_length
+            spacer
             L0
             L1
             L2
@@ -175,53 +179,68 @@ my $headers_5_tsv = join "\t", @headers_5_prime;
 my $headers_3_tsv = join "\t", @headers_3_prime;
 
 foreach my $row ( @{$sql_result_5_prime} ) {
-        my $out_row = join "\t", @{$row}{@headers_5_prime};
-        push @{$clip->{$row->{'marker_symbol'}}->{'5_prime'}}, $out_row; 
+    if ( ! defined $row->{'exon_rank'} ) {
+        say $row->{'marker_symbol'} . ':' . $row->{'ensembl_exon_id'} . ' has no rank information - assigned to rank none';
+        $row->{'exon_rank'} = 'none';
+    }
+    my $out_row = join "\t", @{$row}{@headers_5_prime};
+    push @{$clip->{$row->{'marker_symbol'}}->{$row->{'exon_rank'}}->{'5_prime'}}, $out_row; 
 }
 foreach my $row ( @{$sql_result_3_prime} ) {
-        my $out_row = join "\t", @{$row}{@headers_3_prime};
-        push @{$clip->{$row->{'marker_symbol'}}->{'3_prime'}}, $out_row; 
+    if ( ! defined $row->{'exon_rank'} ) {
+        say $row->{'marker_symbol'} . ':' . $row->{'ensembl_exon_id'} . ' has no rank information - assigned to rank none';
+        $row->{'exon_rank'} = 'none';
+    }
+    my $out_row = join "\t", @{$row}{@headers_3_prime};
+    push @{$clip->{$row->{'marker_symbol'}}->{$row->{'exon_rank'}}->{'3_prime'}}, $out_row; 
 }
 my $tab_filename = 'filtered_crisprs.tsv';
 open( my $tab_fh, '>', $tab_filename )
     or die "Can't open file $tab_filename: $! \n";
+
 foreach my $gene_symbol ( keys %{$clip} ) {
     print $tab_fh "$gene_symbol: 5_prime\n"; 
-    if ( $clip->{$gene_symbol}->{'5_prime'} ) {
-        # print headers
-        print $tab_fh $headers_5_tsv . "\n";
-        foreach my $line ( @{$clip->{$gene_symbol}->{'5_prime'}} ) {
-            if ( defined($line) and length($line) ) {
-                print $tab_fh $line . "\n";
-            }
-            else
-            {
-                print $tab_fh 'No results with selected parameters' . "\n";
+    print $tab_fh $headers_5_tsv . "\n";
+    foreach my $exon_rank ( sort keys %{$clip->{$gene_symbol}} ) {
+        if ( $clip->{$gene_symbol}->{$exon_rank}->{'5_prime'} ) {
+            print $tab_fh "\n";
+            foreach my $line ( @{$clip->{$gene_symbol}->{$exon_rank}->{'5_prime'}} ) {
+                if ( defined($line) and length($line) ) {
+                    print $tab_fh $line . "\n";
+                }
+                else
+                {
+                    print $tab_fh 'No results with selected parameters' . "\n";
+                }
             }
         }
-    }
-    else
-    {
-        print $tab_fh 'No results with selected parameters' . "\n";
+        else
+        {
+            print $tab_fh 'No results with selected parameters for this exon' . "\n";
+        }
     }
     print $tab_fh "\n";
     print $tab_fh "$gene_symbol: 3_prime\n"; 
-    if ( $clip->{$gene_symbol}->{'3_prime'} ) {
-        print $tab_fh $headers_3_tsv . "\n";
-        foreach my $line ( @{$clip->{$gene_symbol}->{'3_prime'}} ) {
-            if ( defined($line) and length($line) ) {
-            print $tab_fh $line . "\n"
-            }
-            else
-            {
-                print $tab_fh 'No results with selected parameters' . "\n";
+    print $tab_fh $headers_3_tsv . "\n";
+    
+    foreach my $exon_rank ( sort keys %{$clip->{$gene_symbol}} ) {
+        if ( $clip->{$gene_symbol}->{$exon_rank}->{'3_prime'} ) {
+            print $tab_fh "\n";
+            foreach my $line ( @{$clip->{$gene_symbol}->{$exon_rank}->{'3_prime'}} ) {
+                if ( defined($line) and length($line) ) {
+                print $tab_fh $line . "\n"
+                }
+                else
+                {
+                    print $tab_fh 'No results with selected parameters' . "\n";
+                }
             }
         }
-    }
-    else
-    {
-        print $tab_fh 'No results with selected parameters' . "\n";
-    }
+        else
+        {
+            print $tab_fh 'No results with selected parameters for this exon' . "\n";
+        }
+}
     print $tab_fh "\n\n";
 }
 print $tab_fh "End of File\n";
@@ -239,6 +258,7 @@ WITH dt as (
     SELECT
          ensembl_exon_id
         ,marker_symbol
+        ,exon_rank
         ,chr_id
         ,(chr_start-200) as chr_start
         ,chr_start as exon_start
@@ -276,6 +296,7 @@ exon_left as (
 SELECT
      dt.ensembl_exon_id
     ,dt.marker_symbol
+    ,dt.exon_rank
     ,dt.left_window
     ,dt.right_window
     ,pairs.pair_id crispr_pair_id
@@ -301,6 +322,7 @@ results as (
 SELECT
      ensembl_exon_id
     ,marker_symbol
+    ,exon_rank
     ,crispr_pair_id
     ,lleft_diff as "left_diff"
     ,lright_diff as "right_diff"
@@ -328,10 +350,10 @@ JOIN crispr_off_target_summaries coff_right
 )
 
 SELECT DISTINCT * FROM results
-WHERE l0 = 1 AND L1 = 0 and L2 <= 3
-    AND R0 = 1 AND R1 = 0 and R2 <= 3
-    AND pair_length > 20 AND pair_length < 70
-    ORDER BY results.marker_symbol, results.ensembl_exon_id, pair_length
+WHERE l0 = 1 AND L1 = 0 and L2 <= 1
+    AND R0 = 1 AND R1 = 0 and R2 <= 1
+    AND spacer >= 10 and spacer <= 20
+    ORDER BY results.marker_symbol, results.exon_rank, spacer
 EOQ
 }
 
@@ -343,6 +365,7 @@ WITH dt as (
     SELECT
          ensembl_exon_id
         ,marker_symbol
+        ,exon_rank
         ,chr_id
         ,(chr_start-200) as chr_start
         ,chr_start as exon_start
@@ -380,6 +403,7 @@ exon_right as (
 SELECT
      dt.ensembl_exon_id
     ,dt.marker_symbol
+    ,dt.exon_rank
     ,dt.left_window
     ,dt.right_window
     ,pairs.pair_id crispr_pair_id
@@ -406,6 +430,7 @@ results as (
 SELECT
      ensembl_exon_id
     ,marker_symbol
+    ,exon_rank
     ,crispr_pair_id
     ,rleft_diff as "left_diff"
     ,rright_diff as "right_diff"
@@ -432,9 +457,9 @@ JOIN crispr_off_target_summaries coff_right
     ON coff_right.crispr_id=exon_right.right_crispr_id
 )
 SELECT DISTINCT * from results
-WHERE l0 = 1 AND L1 = 0 and L2 <= 3
-    AND R0 = 1 AND R1 = 0 and R2 <= 3
-    AND pair_length > 20 AND pair_length < 70
-    ORDER BY results.marker_symbol, results.ensembl_exon_id, pair_length
+WHERE l0 = 1 AND L1 = 0 and L2 <= 1
+    AND R0 = 1 AND R1 = 0 and R2 <= 1
+    AND spacer >= 10 and spacer <= 20
+    ORDER BY results.marker_symbol, results.exon_rank, spacer
 EOQ
 }
