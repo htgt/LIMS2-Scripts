@@ -5,6 +5,18 @@ use feature qw/ say /;
 use strict;
 use warnings;
 use Try::Tiny;
+=head filter_crisprs_coding
+
+This file writes out filtered_crisprs.tsv
+
+NB: Requires an adidtional table in LIMS2 that contains the translated exon coordinates for each exon that has a translated region.
+
+This is used as part fot he first with join. The SQL to create the table is in the sql directory. The populate_gene_coding_meta.pl
+script is used to generate a csv file for loading the table in psql, using:
+
+psql> \copy gene_coding_meta from gene_coding_meta.csv with csv header;
+
+=cut
 
 my @exon_array = (qw/
 ENSMUSE00000333247
