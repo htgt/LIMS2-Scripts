@@ -31,7 +31,7 @@ if ( $plate_name ) {
 }
 elsif ( $design_file ) {
     my @design_ids = map{ chomp; $_ } slurp $design_file;
-    @designs = map{ $model->retrieve_design( { id => $_ } ) } @design_ids;
+    @designs = map{ $model->c_retrieve_design( { id => $_ } ) } @design_ids;
 }
 else {
     pod2usage(
