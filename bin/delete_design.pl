@@ -21,9 +21,9 @@ die( 'Must specify design id' ) unless $design_id;
 $model->txn_do(
     sub {
         try{
-            my $design = $model->retrieve_design( { id => $design_id } );
+            my $design = $model->c_retrieve_design( { id => $design_id } );
             $design->genes->delete;
-            $model->delete_design( { id => $design_id, cascade => 1 } );
+            $model->c_delete_design( { id => $design_id, cascade => 1 } );
             print "deleted design $design_id\n";
             unless ( $commit ) {
                 print "non-commit mode, rollback\n";

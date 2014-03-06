@@ -30,7 +30,7 @@ my $model = LIMS2::Model->new( user => 'webapp', audit_user => $ENV{USER}.'@sang
         #get u5_oligos data from LIMS2
         my $design;
         try {
-            $design = $model->retrieve_design({id => $design_id});
+            $design = $model->c_retrieve_design({id => $design_id});
         }
         catch {
             WARN( "$_");

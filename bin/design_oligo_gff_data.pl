@@ -42,7 +42,7 @@ for my $design_id ( @designs ) {
     Log::Log4perl::NDC->push( $design_id );
     INFO( "Generate gff data for design $design_id" );
 
-    my $design = $model->retrieve_design( { id => $design_id } );
+    my $design = $model->c_retrieve_design( { id => $design_id } );
     unless( $design ) {
         ERROR( "Unable to find design $design_id" );
         next;
