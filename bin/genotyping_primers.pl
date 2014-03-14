@@ -1,88 +1,157 @@
 #! /usr/bin/perl
 
 use LIMS2::Model;
-use feature qw/ say /;
 use strict;
 use warnings;
 use Try::Tiny;
 use Carp;
 
+use Log::Log4perl qw(:easy);
+Log::Log4perl->easy_init($DEBUG);
+my $logger = Log::Log4perl->get_logger('primer_design');
+
 use LIMS2::Model::Util::OligoSelection;
 
-=head filter_crisprs_coding
+#primers_for_plate( 'HG0' );
+primers_for_plate( 'HG0' );
 
-This file writes out genotyping_primers.csv
+sub primers_for_plate {
+    my $plate_name_input = shift;
+    $logger->info("Starting primer generation for plate $plate_name_input");
 
-Calls the OligoSelection module of LIMS2 and formats the resulting hash
-as a csv file.
+    my $model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
 
-=cut
+    # Probably get the design ids from a file or the command line or directly from the database.
+    my $species = 'Human';
 
-my $model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
-
-# Probably get the design ids from a file or the command line or directly from the database.
-my $species = 'Human';
-
-my $plate_rs = $model->schema->resultset( 'Plate' )->search(
-    {
-        'name' => 'HG1'
-    },
-);
+    my $plate_rs = $model->schema->resultset( 'Plate' )->search(
+        {
+            'name' => $plate_name_input
+        },
+    );
 
 
-my $plate = $plate_rs->first;
-my $plate_name = $plate->name;
-print 'Plate selected: ' . $plate_name . "\n";
+    my $plate = $plate_rs->first;
+    my $plate_name = $plate->name;
+    print 'Plate selected: ' . $plate_name . "\n";
 
-my @wells = $plate->wells->all;
+    my @wells = $plate->wells->all;
 
-my $well_count = @wells;
-say 'Processing crispr primers for ' . $well_count . ' wells:';
-my @well_id_list;
+    my $well_count = @wells;
+    $logger->info( 'Processing crispr primers for ' . $well_count . ' wells:');
+    my @well_id_list;
 
-foreach my $well ( @wells ) {
-    push @well_id_list, $well->id;
+    foreach my $well ( @wells ) {
+        push @well_id_list, $well->id;
+    }
+
+    my $design_data_cache = $model->create_design_data_cache(
+            \@well_id_list,
+        );
+
+    $logger->debug( 'Created design well data cache' );
+
+
+
+    run_primers({
+            'wells' => \@wells,
+            'design_data_cache' => $design_data_cache,
+            'model' => $model,
+            'species' => $species,
+            'plate_name' => $plate_name,
+        });
+
+    $logger->info( 'Done' );
+
 }
-
-my $design_data_cache = $model->create_design_data_cache( \@well_id_list );
-
-say 'Created design well data cache';
-
-
-my $gene_cache;
-
-run_primers();
-
-say 'Done' . "\n";
 
 ##
 #
 sub run_primers {
-    my $lines;
-    say 'Generating gene symbol cache';
+    my $params = shift;
 
-    generate_gene_symbols_cache();
-    say 'Preparing crispr primers';
-    my $out_rows = prepare_crispr_primers();
-    say 'Generating crispr primer output file';
+    my $wells = $params->{'wells'};
+    my $design_data_cache = $params->{'design_data_cache'};
+    my $model = $params->{'model'};
+    my $species = $params->{'species'};
+    my $plate_name = $params->{'plate_name'};
+
+    my $lines;
+    $logger->debug( 'Generating gene symbol cache' );
+
+    $design_data_cache = generate_gene_symbols_cache({
+            'wells' => $wells,
+            'design_data_cache' => $design_data_cache,
+            'species' => $species,
+            'model' => $model,
+        });
+    $logger->debug( 'Preparing crispr primers');
+    my ($out_rows, $crispr_clip ) = prepare_crispr_primers({
+            'model' => $model,
+            'wells' => $wells,
+            'design_data_cache' => $design_data_cache,
+            'species' => $species,
+        });
+    $logger->debug( 'Generating crispr primer output file' );
     $lines = generate_crispr_output( $out_rows );
-    create_output_file( 'crispr_primers.csv', $lines );
-    say 'Generating genotyping primers';
-    $out_rows = prepare_genotyping_primers();
+    create_output_file( $plate_name . 'crispr_primers.csv', $lines );
+
+#    $logger->info( 'Generating PCR primers for crispr region' );
+#    $out_rows = prepare_pcr_primers({
+#            'model' => $model,
+#            'crispr_clip' => $crispr_clip,
+#            'wells' => $wells,
+#            'design_data_cache' => $design_data_cache,
+#            'species' => $species,
+#        });
+
+#    $lines = generate_pcr_output( $out_rows );
+#    create_output_file( 'pcr_primers.csv', $lines );
+
+
+    $logger->info( 'Generating genotyping primers' );
+    $out_rows = prepare_genotyping_primers({
+            'model' => $model,
+            'wells' => $wells,
+            'design_data_cache' => $design_data_cache,
+            'species' => $species,
+        });
+
     $lines = generate_genotyping_output( $out_rows );
-    say 'Generating genotyping primer output file';
-    create_output_file( 'genotpying_primers.csv' ,$lines );
+    $logger->info( 'Generating genotyping primer output file' );
+    create_output_file( $plate_name . 'genotpying_primers.csv' ,$lines );
 
     return;
 }
 
 
+sub prepare_pcr_primers {
+    my $params = shift;
+
+    my $model = $params->{'model'};
+    my $crispr_clip = $params->{'crispr_clip'};
+    my $wells = $params->{'wells'};
+    my $design_data_cache = $params->{'design_data_cache'};
+    my $species = $params->{'species'};
+
+
+#    return $out_rows;
+return
+}
+
 sub prepare_genotyping_primers {
+    my $params = shift;
+
+    my $model = $params->{'model'};
+    my $wells = $params->{'wells'};
+    my $design_data_cache = $params->{'design_data_cache'};
+    my $species = $params->{'species'};
+
 
     my %primer_clip;
 
     my $design_row;
-    foreach my $well ( @wells ) {
+    foreach my $well ( @{$wells} ) {
         my $well_id = $well->id;
         my $design_id = $design_data_cache->{$well_id}->{'design_id'};
         my $gene_id = $design_data_cache->{$well_id}->{'gene_id'};
@@ -91,7 +160,7 @@ sub prepare_genotyping_primers {
 
         $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
 
-        say $design_id . "\t(" . $gene_name . ')';
+        $logger->info( $design_id . "\t(" . $gene_name . ')' );
 
         my ($genotyping_primers, $genotyping_mapped, $chr_strand, $design_oligos)
             = LIMS2::Model::Util::OligoSelection::pick_genotyping_primers( {
@@ -152,7 +221,7 @@ sub prepare_genotyping_primers {
 
         }
         else {
-            say 'Chromosome strand not defined.' ;
+            $logger->error( 'Chromosome strand not defined.' );
         }
         push (@out_vals,
             $primer_clip{$well_name}->{'design_oligos'}->{'5F'}->{'seq'},
@@ -192,10 +261,17 @@ sub get_best_two_primer_ranks {
 }
 
 sub prepare_crispr_primers {
+    my $params = shift;
+
+    my $model = $params->{'model'};
+    my $wells = $params->{'wells'};
+    my $design_data_cache = $params->{'design_data_cache'};
+    my $species = $params->{'species'};
+
     my %primer_clip;
 
     my $design_row;
-    foreach my $well ( @wells ) {
+    foreach my $well ( @{$wells} ) {
         my $well_id = $well->id;
         my $design_id = $design_data_cache->{$well_id}->{'design_id'};
         my $gene_id = $design_data_cache->{$well_id}->{'gene_id'};
@@ -206,7 +282,7 @@ sub prepare_crispr_primers {
 
         my ($crispr_design) = $model->schema->resultset('CrisprDesign')->search ( { 'design_id' => $design_id } );
         my $crispr_pair_id = $crispr_design->crispr_pair_id;
-        say "$design_id\t$gene_name\tcrispr_pair_id:\t$crispr_pair_id";
+        $logger->info( "$design_id\t$gene_name\tcrispr_pair_id:\t$crispr_pair_id" );
 
         my ($crispr_results, $crispr_primers, $chr_strand) = LIMS2::Model::Util::OligoSelection::pick_crispr_primers( {
                 schema => $model->schema,
@@ -302,8 +378,15 @@ sub generate_genotyping_output {
 }
 
 sub generate_gene_symbols_cache {
+    my $params = shift;
 
-    foreach my $well ( @wells ) {
+    my $wells = $params->{'wells'};
+    my $design_data_cache = $params->{'design_data_cache'};
+    my $model = $params->{'model'};
+    my $species = $params->{'species'};
+
+    my $gene_cache; 
+    foreach my $well ( @{$wells} ) {
         my $well_id = $well->id;
         my $gene_id = $design_data_cache->{$well_id}->{'gene_id'};
         my $gene_name;
@@ -323,7 +406,7 @@ sub generate_gene_symbols_cache {
         }
         $design_data_cache->{$well_id}->{'gene_symbol'} = $gene_name;
     }
-    return;
+    return $design_data_cache;
 }
 
 
