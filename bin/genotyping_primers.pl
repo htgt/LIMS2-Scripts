@@ -33,7 +33,7 @@ sub primers_for_plate {
 
     my $plate = $plate_rs->first;
     my $plate_name = $plate->name;
-    print 'Plate selected: ' . $plate_name . "\n";
+    $logger->info( 'Plate selected: ' . $plate_name );
 
     my @wells = $plate->wells->all;
 
@@ -94,19 +94,20 @@ sub run_primers {
         });
     $logger->debug( 'Generating crispr primer output file' );
     $lines = generate_crispr_output( $out_rows );
-    create_output_file( $plate_name . 'crispr_primers.csv', $lines );
+    create_output_file( $plate_name . '_crispr_primers.csv', $lines );
 
-#    $logger->info( 'Generating PCR primers for crispr region' );
-#    $out_rows = prepare_pcr_primers({
-#            'model' => $model,
-#            'crispr_clip' => $crispr_clip,
-#            'wells' => $wells,
-#            'design_data_cache' => $design_data_cache,
-#            'species' => $species,
-#        });
-
-#    $lines = generate_pcr_output( $out_rows );
-#    create_output_file( 'pcr_primers.csv', $lines );
+    $logger->info( 'Generating PCR primers for crispr region' );
+    $out_rows = prepare_pcr_primers({
+            'model' => $model,
+            'crispr_clip' => $crispr_clip,
+            'wells' => $wells,
+            'design_data_cache' => $design_data_cache,
+            'species' => $species,
+        });
+$DB::single=1;
+    $logger->debug( 'Generating pcr primer output file' );
+    $lines = generate_pcr_output( $out_rows );
+    create_output_file( $plate_name . '_pcr_primers.csv', $lines );
 
 
     $logger->info( 'Generating genotyping primers' );
@@ -134,9 +135,77 @@ sub prepare_pcr_primers {
     my $design_data_cache = $params->{'design_data_cache'};
     my $species = $params->{'species'};
 
+    foreach my $well ( @{$wells} ) {
+        my $well_id = $well->id;
+        my $well_name = $well->name;
 
-#    return $out_rows;
-return
+        my $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
+
+        $logger->info( 'crispr_pcr: ' . $well_name . "\t(" . $gene_name . ')' );
+
+        my ($crispr_pcr_primers, $crispr_pcr_mapped)
+            = LIMS2::Model::Util::OligoSelection::pick_crispr_PCR_primers( {
+                schema => $model->schema,
+                well_id => $well,
+                crispr_primers => $crispr_clip->{$well_name},
+                species => $species,
+            });
+        $crispr_clip->{$well_name}->{'crispr_pcr_primers'} = $crispr_pcr_mapped;
+
+    }
+    my @out_rows;
+    my $primer_type = 'crispr_pcr_primers';
+    foreach my $well_name ( keys %{$crispr_clip} ) {
+        my @out_vals = (
+            $well_name,
+            $crispr_clip->{$well_name}->{'gene_name'} // 'not set',
+            $crispr_clip->{$well_name}->{'design_id'} // 'not set',
+            $crispr_clip->{$well_name}->{'strand'} // 'not set',
+        );
+        # Take the two highest ranking primers
+        my ($rank_a, $rank_b) = get_best_two_primer_ranks( $crispr_clip->{$well_name}->{$primer_type}->{'left'} );
+        # only need left or right as both will be the same for rank purposes
+        if ($crispr_clip->{$well_name}->{'strand'} eq 'plus') {
+            # first set    
+            push (@out_vals, 
+                data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99')
+            );
+            push (@out_vals, (
+                data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_a // '99')
+            ));
+            # second set
+            push (@out_vals, 
+                data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_b // '99')
+            );
+            push (@out_vals, (
+                data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_b // '99')
+            ));
+        }
+        elsif ($crispr_clip->{$well_name}->{'strand'} eq 'minus') {
+            push (@out_vals, 
+                data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_a // '99')
+            );
+            push (@out_vals, (
+                data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99')
+            ));
+            # GF2/GR2
+            push (@out_vals, 
+                data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_b // '99')
+            );
+            push (@out_vals, (
+                data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_b // '99')
+            ));
+
+        }
+        else {
+            $logger->error( 'Chromosome strand not defined.' );
+        }
+        # Anything after here for context only
+
+        my $csv_row = join( ',' , @out_vals);
+        push @out_rows, $csv_row;
+    }
+    return \@out_rows;
 }
 
 sub prepare_genotyping_primers {
@@ -328,7 +397,7 @@ sub prepare_crispr_primers {
         push @out_rows, $csv_row;
     }
 
-    return \@out_rows;
+    return (\@out_rows, \%primer_clip);
 }
 
 
@@ -354,6 +423,21 @@ sub generate_crispr_output {
     my $op;
     $op = "Sequencing primers\n";
     $op .= "WARNING: These primers are for sequencing a PCR product - no genomic check has been applied to these primers\n\n";
+    $op .= $$headers . "\n";
+    foreach my $row ( sort @{$out_rows} ) {
+         $op .= $row . "\n";
+    }
+    $op .= "End of File\n";
+    return $op;
+}
+
+sub generate_pcr_output {
+    my $out_rows = shift;
+    my $headers = generate_pcr_headers();
+
+    my $op;
+    $op = "PCR crispr region primers\n";
+    $op .= "Genomic specificity check has been applied to these primers\n\n";
     $op .= $$headers . "\n";
     foreach my $row ( sort @{$out_rows} ) {
          $op .= $row . "\n";
@@ -435,6 +519,40 @@ sub generate_crispr_headers {
     /);
 
     my $headers = join ',', @crispr_headings;
+
+    return \$headers;
+}
+
+sub generate_pcr_headers {
+
+    my @pcr_headings = (qw/
+        well_name
+        gene_symbol
+        design_id
+        strand
+        PF1
+        PF1_strand
+        PF1_length
+        PF1_gc_content
+        PF1_tm
+        PR1
+        PR1_strand
+        PF1_length
+        PR1_gc_content
+        PR1_tm
+        PF2
+        PF2_strand
+        PF2_length
+        PF2_gc_content
+        PF2_tm
+        PR2
+        PR2_strand
+        PF2_length
+        PR2_gc_content
+        PR2_tm
+    /);
+
+    my $headers = join ',', @pcr_headings;
 
     return \$headers;
 }
