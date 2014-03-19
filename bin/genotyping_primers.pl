@@ -166,15 +166,15 @@ sub prepare_pcr_primers {
         my ($rank_a, $rank_b) = get_best_two_primer_ranks( $crispr_clip->{$well_name}->{$primer_type}->{'left'} );
         # only need left or right as both will be the same for rank purposes
         if ($crispr_clip->{$well_name}->{'strand'} eq 'plus') {
-            # first set    
-            push (@out_vals, 
+            # first set
+            push (@out_vals,
                 data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             );
             push (@out_vals, (
                 data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             ));
             # second set
-            push (@out_vals, 
+            push (@out_vals,
                 data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_b // '99')
             );
             push (@out_vals, (
@@ -182,14 +182,14 @@ sub prepare_pcr_primers {
             ));
         }
         elsif ($crispr_clip->{$well_name}->{'strand'} eq 'minus') {
-            push (@out_vals, 
+            push (@out_vals,
                 data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             );
             push (@out_vals, (
                 data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             ));
             # GF2/GR2
-            push (@out_vals, 
+            push (@out_vals,
                 data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             );
             push (@out_vals, (
@@ -259,14 +259,14 @@ sub prepare_genotyping_primers {
         # only need left or right as both will be the same for rank purposes
         # GF1/GR1
         if ($primer_clip{$well_name}{'strand'} eq 'plus') {
-            push (@out_vals, 
+            push (@out_vals,
                 data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             );
             push (@out_vals, (
                 data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             ));
             # GF2/GR2
-            push (@out_vals, 
+            push (@out_vals,
                 data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank_b // '99')
             );
             push (@out_vals, (
@@ -274,14 +274,14 @@ sub prepare_genotyping_primers {
             ));
         }
         elsif ($primer_clip{$well_name}{'strand'} eq 'minus') {
-            push (@out_vals, 
+            push (@out_vals,
                 data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             );
             push (@out_vals, (
                 data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             ));
             # GF2/GR2
-            push (@out_vals, 
+            push (@out_vals,
                 data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             );
             push (@out_vals, (
@@ -311,7 +311,7 @@ sub data_to_push {
     my $lr = shift;
     my $rank = shift;
 
-    my $primer_name = $lr . '_' . $rank; 
+    my $primer_name = $lr . '_' . $rank;
     return (
         $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'seq'} // "'-",
         $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_strand'} // "'-",
@@ -469,7 +469,7 @@ sub generate_gene_symbols_cache {
     my $model = $params->{'model'};
     my $species = $params->{'species'};
 
-    my $gene_cache; 
+    my $gene_cache;
     foreach my $well ( @{$wells} ) {
         my $well_id = $well->id;
         my $gene_id = $design_data_cache->{$well_id}->{'gene_id'};
