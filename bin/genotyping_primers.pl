@@ -5,6 +5,7 @@ use strict;
 use warnings;
 use Try::Tiny;
 use Carp;
+use Getopt::Long;
 
 use Log::Log4perl qw(:easy);
 Log::Log4perl->easy_init($DEBUG);
@@ -12,12 +13,29 @@ my $logger = Log::Log4perl->get_logger('primer_design');
 
 use LIMS2::Model::Util::OligoSelection;
 
-#primers_for_plate( 'HG0' );
-primers_for_plate( 'HG0' );
+my $plate_name_param = '';
+my @repeat_mask_param ;
+GetOptions(
+    'plate=s' => \$plate_name_param,
+    'repeat_mask=s' => \@repeat_mask_param,
+)
+or die "Usage: perl genotyping_primers.pl --plate=plate_name --repeat_mask=TRF";
+if ($plate_name_param eq '') {
+    die "Usage: perl genotyping_primers.pl --plate=plate_name [--repeat_mask=TRF [--repeat_mask=...] (default: NONE)]\n";
+}
+
+if ( scalar @repeat_mask_param == 0 ) {
+    push  @repeat_mask_param,'NONE';
+}
+
+primers_for_plate( $plate_name_param, \@repeat_mask_param );
 
 sub primers_for_plate {
     my $plate_name_input = shift;
+    my $repeat_mask=shift;
     $logger->info("Starting primer generation for plate $plate_name_input");
+    my $rpt_string = join( ',', @$repeat_mask);
+    $logger->info("Using sequence repeat mask of: $rpt_string");
 
     my $model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
 
@@ -59,10 +77,11 @@ sub primers_for_plate {
             'model' => $model,
             'species' => $species,
             'plate_name' => $plate_name,
+            'repeat_mask' => $repeat_mask,
         });
 
     $logger->info( 'Done' );
-
+    return;
 }
 
 ##
@@ -75,6 +94,7 @@ sub run_primers {
     my $model = $params->{'model'};
     my $species = $params->{'species'};
     my $plate_name = $params->{'plate_name'};
+    my $repeat_mask= $params->{'repeat_mask'};
 
     my $lines;
     $logger->debug( 'Generating gene symbol cache' );
@@ -91,6 +111,7 @@ sub run_primers {
             'wells' => $wells,
             'design_data_cache' => $design_data_cache,
             'species' => $species,
+            'repeat_mask' => $repeat_mask,
         });
     $logger->debug( 'Generating crispr primer output file' );
     $lines = generate_crispr_output( $out_rows );
@@ -103,8 +124,8 @@ sub run_primers {
             'wells' => $wells,
             'design_data_cache' => $design_data_cache,
             'species' => $species,
+            'repeat_mask' => $repeat_mask,
         });
-$DB::single=1;
     $logger->debug( 'Generating pcr primer output file' );
     $lines = generate_pcr_output( $out_rows );
     create_output_file( $plate_name . '_pcr_primers.csv', $lines );
@@ -116,11 +137,12 @@ $DB::single=1;
             'wells' => $wells,
             'design_data_cache' => $design_data_cache,
             'species' => $species,
+            'repeat_mask' => $repeat_mask,
         });
 
     $lines = generate_genotyping_output( $out_rows );
     $logger->info( 'Generating genotyping primer output file' );
-    create_output_file( $plate_name . 'genotpying_primers.csv' ,$lines );
+    create_output_file( $plate_name . '_genotpying_primers.csv' ,$lines );
 
     return;
 }
@@ -134,6 +156,7 @@ sub prepare_pcr_primers {
     my $wells = $params->{'wells'};
     my $design_data_cache = $params->{'design_data_cache'};
     my $species = $params->{'species'};
+    my $repeat_mask = $params->{'repeat_mask'};
 
     foreach my $well ( @{$wells} ) {
         my $well_id = $well->id;
@@ -149,6 +172,7 @@ sub prepare_pcr_primers {
                 well_id => $well,
                 crispr_primers => $crispr_clip->{$well_name},
                 species => $species,
+                repeat_mask => $repeat_mask,
             });
         $crispr_clip->{$well_name}->{'crispr_pcr_primers'} = $crispr_pcr_mapped;
 
@@ -215,6 +239,7 @@ sub prepare_genotyping_primers {
     my $wells = $params->{'wells'};
     my $design_data_cache = $params->{'design_data_cache'};
     my $species = $params->{'species'};
+    my $repeat_mask = $params->{'repeat_mask'};
 
 
     my %primer_clip;
@@ -237,6 +262,7 @@ sub prepare_genotyping_primers {
                 design_id => $design_id,
                 well_id => $well,
                 species => $species,
+                repeat_mask => $repeat_mask,
             });
         $primer_clip{$well_name}{'gene_name'} = $gene_name;
         $primer_clip{$well_name}{'design_id'} = $design_id;
@@ -336,6 +362,7 @@ sub prepare_crispr_primers {
     my $wells = $params->{'wells'};
     my $design_data_cache = $params->{'design_data_cache'};
     my $species = $params->{'species'};
+    my $repeat_mask = $params->{'repeat_mask'};
 
     my %primer_clip;
 
@@ -358,6 +385,7 @@ sub prepare_crispr_primers {
                 design_id => $design_id,
                 crispr_pair_id => $crispr_pair_id,
                 species => $species,
+                repeat_mask => $repeat_mask,
             });
         $primer_clip{$well_name}{'pair_id'} = $crispr_pair_id;
         $primer_clip{$well_name}{'gene_name'} = $gene_name;
