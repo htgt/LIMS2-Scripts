@@ -24,10 +24,10 @@ GetOptions(
     'repeat_mask=s' => \@repeat_mask_param,
     'species=s' => \$species_param,
 )
-or die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name --species=[Human | Mouse] --repeat_mask=TRF";
+or die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--species=(Human | Mouse)] [--repeat_mask=TRF [--repear_mask=...] (default: NONE)]\n";
 
 if ($plate_name_param eq '') {
-    die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--species=[Human | Mouse] --repeat_mask=TRF [--repeat_mask=...] (default: NONE)]\n";
+    die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--species=(Human | Mouse)] [--repeat_mask=TRF [--repeat_mask=...] (default: NONE)]\n";
 }
 
 if ( scalar @repeat_mask_param == 0 ) {
