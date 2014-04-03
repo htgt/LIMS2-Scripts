@@ -14,25 +14,41 @@ my $logger = Log::Log4perl->get_logger('primer_design');
 use LIMS2::Model::Util::OligoSelection;
 
 my $plate_name_param = '';
-my @repeat_mask_param ;
+my $plate_well_param = '';
+my $species_param = 'Human';
+my @repeat_mask_param;
+
 GetOptions(
     'plate=s' => \$plate_name_param,
+    'well=s' => \$plate_well_param,
     'repeat_mask=s' => \@repeat_mask_param,
+    'species=s' => \$species_param,
 )
-or die "Usage: perl genotyping_primers.pl --plate=plate_name --repeat_mask=TRF";
+or die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name --species=[Human | Mouse] --repeat_mask=TRF";
+
 if ($plate_name_param eq '') {
-    die "Usage: perl genotyping_primers.pl --plate=plate_name [--repeat_mask=TRF [--repeat_mask=...] (default: NONE)]\n";
+    die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--species=[Human | Mouse] --repeat_mask=TRF [--repeat_mask=...] (default: NONE)]\n";
 }
 
 if ( scalar @repeat_mask_param == 0 ) {
     push  @repeat_mask_param,'NONE';
 }
 
-primers_for_plate( $plate_name_param, \@repeat_mask_param );
+$DB::single=1;
+
+if ( $plate_well_param eq '' ) {
+    primers_for_plate( $plate_name_param, \@repeat_mask_param , $species_param);
+}
+else
+{
+    primers_for_plate_well( $plate_name_param, $plate_well_param, \@repeat_mask_param, $species_param );
+}
 
 sub primers_for_plate {
     my $plate_name_input = shift;
-    my $repeat_mask=shift;
+    my $repeat_mask = shift;
+    my $species_input = shift;
+
     $logger->info("Starting primer generation for plate $plate_name_input");
     my $rpt_string = join( ',', @$repeat_mask);
     $logger->info("Using sequence repeat mask of: $rpt_string");
@@ -40,13 +56,18 @@ sub primers_for_plate {
     my $model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
 
     # Probably get the design ids from a file or the command line or directly from the database.
-    my $species = 'Human';
+    my $species = $species_input;
 
     my $plate_rs = $model->schema->resultset( 'Plate' )->search(
         {
             'name' => $plate_name_input
         },
     );
+
+     if ( !$plate_rs->count ) {
+         $logger->fatal("No wells on plate or non-existent plate: $plate_name_input");
+         exit;
+     }
 
 
     my $plate = $plate_rs->first;
@@ -62,6 +83,72 @@ sub primers_for_plate {
     foreach my $well ( @wells ) {
         push @well_id_list, $well->id;
     }
+
+    my $design_data_cache = $model->create_design_data_cache(
+            \@well_id_list,
+        );
+
+    $logger->debug( 'Created design well data cache' );
+
+
+
+    run_primers({
+            'wells' => \@wells,
+            'design_data_cache' => $design_data_cache,
+            'model' => $model,
+            'species' => $species,
+            'plate_name' => $plate_name,
+            'repeat_mask' => $repeat_mask,
+        });
+
+    $logger->info( 'Done' );
+    return;
+}
+
+sub primers_for_plate_well {
+    my $plate_name_input = shift;
+    my $plate_well_input = shift;
+    my $repeat_mask=shift;
+    my $species_input = shift;
+
+    $logger->info("Starting primer generation for plate $plate_name_input well $plate_well_input");
+    my $rpt_string = join( ',', @$repeat_mask);
+    $logger->info("Using sequence repeat mask of: $rpt_string");
+
+    my $model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
+
+    # Probably get the design ids from a file or the command line or directly from the database.
+    my $species = $species_input;
+
+    my $plate_rs = $model->schema->resultset( 'Plate' )->search(
+        {
+            'name' => $plate_name_input
+        },
+    );
+
+     if ( !$plate_rs->count ) {
+         $logger->fatal("No wells on plate or non-existent plate: $plate_name_input");
+         exit;
+     }
+
+
+    my $plate = $plate_rs->first;
+    my $plate_name = $plate->name;
+    $logger->info( 'Plate selected: ' . $plate_name );
+
+    my @wells = $plate->wells->all;
+
+    my $well_count = @wells;
+    $logger->info( 'Processing crispr primers for 1 well of ' . $well_count . ' wells:');
+    my @well_id_list;
+
+    foreach my $well ( @wells ) {
+        if ( $well->name eq $plate_well_input ) {
+            push @well_id_list, $well->id;
+        }
+    }
+
+    @wells = grep { $_->name =~ /$plate_well_input/  } @wells;
 
     my $design_data_cache = $model->create_design_data_cache(
             \@well_id_list,
