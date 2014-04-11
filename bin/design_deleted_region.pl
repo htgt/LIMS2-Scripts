@@ -45,9 +45,70 @@ for my $id ( @designs ) {
     die "unable to locate design $id" unless $design;
     die "Design $id is not $species_id" unless $design->species_id eq $species_id;
 
-    my $start    = $design->info->cassette_start; 
-    my $end      = $design->info->cassette_end; 
+    my $type     = $design->design_type_id;
+    my $oligos   = $design->info->oligos;
     my $chr_name = $design->info->chr_name; 
+    my $strand   = $design->info->chr_strand;
+
+    if ( $type eq 'conditional' ) {
+        if ( $strand == 1 ) {
+            output_seq(
+                $chr_name,
+                $oligos->{U5}{start} - 100,
+                $oligos->{U3}{end} + 100,
+                $design->id . '_' . 'u',
+            );
+
+            output_seq(
+                $chr_name,
+                $oligos->{D5}{start} - 100,
+                $oligos->{D3}{end} + 100,
+                $design->id . '_' . 'd',
+            );
+        }
+        else {
+            output_seq(
+                $chr_name,
+                $oligos->{U3}{start} - 100,
+                $oligos->{U5}{end} + 100,
+                $design->id . '_' . 'u',
+            );
+
+            output_seq(
+                $chr_name,
+                $oligos->{D3}{start} - 100,
+                $oligos->{D5}{end} + 100,
+                $design->id . '_' . 'd',
+            );
+
+        }
+    }
+    elsif ( $type eq 'deletion' ) {
+        if ( $strand == 1 ) {
+            output_seq(
+                $chr_name,
+                $oligos->{U5}{start} - 100,
+                $oligos->{D3}{end} + 100,
+                $design->id,
+            );
+        }
+        else {
+            output_seq(
+                $chr_name,
+                $oligos->{U5}{start} - 100,
+                $oligos->{D3}{end} + 100,
+                $design->id,
+            );
+        }
+    }
+    else {
+        die("Can not deal with design type $type");
+    }
+
+}
+
+sub output_seq {
+    my ( $chr_name, $start, $end, $id ) = @_;
 
     my $slice = $sa->fetch_by_region(
         'chromosome',
@@ -57,10 +118,11 @@ for my $id ( @designs ) {
     );
 
     my $seq = Bio::Seq->new(
-        -display_id => $design->id,
+        -display_id => $id,
         -alphabet   => 'dna',
         -seq        => $slice->seq,
     );
+
     $seq_out->write_seq( $seq );
 }
 
