@@ -624,7 +624,7 @@ sub retrieve_destination_design {
 sub create_destination_design {
     my $design_data = shift;
 
-    my $design_dest = $model_destination->create_design ( $design_data );
+    my $design_dest = $model_destination->c_create_design ( $design_data );
 
     INFO ('Design created has ID: ' . $design_dest->id ) if $design_dest;
 
