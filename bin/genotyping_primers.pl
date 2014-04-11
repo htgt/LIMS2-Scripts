@@ -20,19 +20,21 @@ my $plate_name_param = '';
 my $plate_well_param = '';
 my $species_param = 'Human'; # default is Human TODO: assembly?
 my $crispr_type = 'pair';
+my $format = '';
 my @repeat_mask_param;
 
 GetOptions(
-    'plate=s' => \$plate_name_param,
-    'well=s' => \$plate_well_param,
+    'plate=s'       => \$plate_name_param,
+    'well=s'        => \$plate_well_param,
     'repeat_mask=s' => \@repeat_mask_param,
-    'species=s' => \$species_param,
+    'species=s'     => \$species_param,
     'crispr_type=s' => \$crispr_type,
+    'format=s'      => \$format,
 )
-or die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--crispr_type=(single | pair)] [--species=(Human | Mouse)] [--repeat_mask=TRF [--repear_mask=...] (default: NONE)]\n";
+or die  "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--crispr_type=(single | pair)] [--species=(Human | Mouse)] [--repeat_mask=TRF [--repear_mask=...] (default: NONE)] --format=fsa\n";
 
 if ($plate_name_param eq '') {
-    die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--crispr_type=(single | pair)] [--species=(Human | Mouse)] [--repeat_mask=TRF [--repeat_mask=...] (default: NONE)]\n";
+    die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--crispr_type=(single | pair)] [--species=(Human | Mouse)] [--repeat_mask=TRF [--repeat_mask=...] (default: NONE)] --format=fsa\n";
 }
 
 if ( scalar @repeat_mask_param == 0 ) {
@@ -40,29 +42,44 @@ if ( scalar @repeat_mask_param == 0 ) {
 }
 
 $DB::single=1;
-
-if ( $plate_well_param eq '' ) {
+my $data_clip;
+if ( $plate_well_param  eq '') {
     if ( $crispr_type eq 'single' ) {
-        primers_for_single_crispr_plate( $plate_name_param, \@repeat_mask_param, $species_param );
+        $data_clip = primers_for_single_crispr_plate( $plate_name_param, \@repeat_mask_param, $species_param );
+
     }
     else { 
-        primers_for_plate( $plate_name_param, \@repeat_mask_param , $species_param);
+        $data_clip = primers_for_plate( $plate_name_param, \@repeat_mask_param , $species_param);
     }
 }
 else
 {
-    # TODO: deal with single crispr plate well
-    primers_for_plate_well( $plate_name_param, $plate_well_param, \@repeat_mask_param, $species_param );
+    if ( $crispr_type eq 'single' ) {
+        # $plate_well_param is optional here
+        $data_clip = primers_for_single_crispr_plate( $plate_name_param, \@repeat_mask_param, $species_param, $plate_well_param );
+    }
+    else {
+        $data_clip = primers_for_plate_well( $plate_name_param, $plate_well_param, \@repeat_mask_param, $species_param );
+    }
 }
 
+# If the format is specified as fsa, fasta format files will be generated for each well suitable for input to BlastN
+if ( $format eq 'fsa' ) {
+    $logger->info('Generating blastable fasta files');
+}
+
+exit;
+
+# subroutines start here
+#
 sub primers_for_single_crispr_plate {
     my $plate_name_input = shift;
     my $repeat_mask = shift;
     my $species_input = shift;
+    my $plate_well_input = shift;
 
     $logger->info("Starting primer generation for plate $plate_name_input");
     $logger->info("Primers for sequencing and pcr of a single crispr per well" );
-
     my $rpt_string = join( ',', @$repeat_mask);
     $logger->info("Using sequence repeat mask of: $rpt_string");
 
@@ -93,6 +110,12 @@ sub primers_for_single_crispr_plate {
     $logger->info( 'Processing crispr primers for ' . $well_count . ' wells:');
     my @well_id_list;
 
+    # Select just the well we want
+    if ( $plate_well_input ) {
+        $logger->info("Selecting well: [$plate_well_input]");
+        @wells = grep { $_->name =~ /$plate_well_input/  } @wells;
+    }
+
     foreach my $well ( @wells ) {
         push @well_id_list, $well->id;
     }
@@ -105,7 +128,7 @@ sub primers_for_single_crispr_plate {
 
 
 
-    run_single_crispr_primers({
+    my $clip = run_single_crispr_primers({
             'wells' => \@wells,
             'design_data_cache' => $design_data_cache,
             'model' => $model,
@@ -115,7 +138,7 @@ sub primers_for_single_crispr_plate {
         });
 
     $logger->info( 'Done' );
-    return;
+    return $clip;
 }
 
 sub primers_for_plate {
@@ -276,12 +299,11 @@ sub run_single_crispr_primers {
             'repeat_mask' => $repeat_mask,
         });
     $logger->debug( 'Generating single crispr primer output file' );
-    # can this method cope with both single and paired crisprs
-    $lines = generate_crispr_output( $out_rows );
+    $lines = generate_single_crispr_output( $out_rows );
     create_output_file( $plate_name . '_single_crispr_primers.csv', $lines );
 
     $logger->info( 'Generating PCR primers for crispr region' );
-    $out_rows = prepare_pcr_primers({
+    ($out_rows, $crispr_clip) = prepare_pcr_primers({
             'model' => $model,
             'crispr_clip' => $crispr_clip,
             'wells' => $wells,
@@ -293,7 +315,24 @@ sub run_single_crispr_primers {
     $lines = generate_pcr_output( $out_rows );
     create_output_file( $plate_name . '_pcr_primers.csv', $lines );
     
-    return;
+    # now need to add back in genotyping primers in case short range primers not found
+    # could just do this for the wells that failed in pcr long range.
+    # For now just operate on all wells.
+    $logger->info( 'Generating genotyping primers' );
+    my $design_oligos;
+    $out_rows = prepare_genotyping_primers({
+            'model' => $model,
+            'wells' => $wells,
+            'design_data_cache' => $design_data_cache,
+            'species' => $species,
+            'repeat_mask' => $repeat_mask,
+        });
+
+    $lines = generate_genotyping_output( $out_rows );
+    $logger->info( 'Generating genotyping primer output file' );
+    create_output_file( $plate_name . '_genotyping_primers.csv' ,$lines );
+
+    return $crispr_clip;
 }
 
 sub run_primers {
@@ -342,6 +381,7 @@ sub run_primers {
 
 
     $logger->info( 'Generating genotyping primers' );
+    my $design_oligos;
     $out_rows = prepare_genotyping_primers({
             'model' => $model,
             'wells' => $wells,
@@ -528,9 +568,12 @@ sub prepare_genotyping_primers {
         else {
             $logger->error( 'Chromosome strand not defined.' );
         }
+        my @d_oligo_keys = sort keys %{$primer_clip{$well_name}{'design_oligos'}};
         push (@out_vals,
-            $primer_clip{$well_name}->{'design_oligos'}->{'5F'}->{'seq'},
-            $primer_clip{$well_name}->{'design_oligos'}->{'3R'}->{'seq'},
+            $d_oligo_keys[0],
+            $primer_clip{$well_name}->{'design_oligos'}->{$d_oligo_keys[0]}->{'seq'},
+            $d_oligo_keys[1],
+            $primer_clip{$well_name}->{'design_oligos'}->{$d_oligo_keys[1]}->{'seq'},
         );
 
         my $csv_row = join( ',' , @out_vals);
@@ -579,8 +622,6 @@ sub prepare_single_crispr_primers {
     my $repeat_mask = $params->{'repeat_mask'};
 $DB::single=1;
 
-    # Get the wells on the plate
-    # my $crispr_well_rs = ...
     my %primer_clip;
 
     my $design_row;
@@ -592,11 +633,6 @@ $DB::single=1;
         my $gene_name;
 
         $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
-
-#        my ($crispr_design) = $model->schema->resultset('CrisprDesign')->search ( { 'design_id' => $design_id } );
-#        my $crispr_pair_id = $crispr_design->crispr_pair_id;
-#        $logger->info( "$design_id\t$gene_name\tcrispr_pair_id:\t$crispr_pair_id" );
-
 
         my ($crispr_left, $crispr_right) = $well->left_and_right_crispr_wells;
         my $crispr_id = $crispr_left->crispr->id;
@@ -627,7 +663,7 @@ $DB::single=1;
             $primer_clip{$well_name}{'gene_name'},
             $primer_clip{$well_name}{'design_id'},
             $primer_clip{$well_name}{'strand'},
-            $primer_clip{$well_name}{'pair_id'},
+            $primer_clip{$well_name}{'crispr_id'},
         );
         push (@out_vals, (
             data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank)
@@ -638,10 +674,6 @@ $DB::single=1;
         push (@out_vals,
             $primer_clip{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'id'},
             $primer_clip{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'seq'},
-        );
-        push (@out_vals,
-            $primer_clip{$well_name}->{'crispr_seq'}->{'right_crispr'}->{'id'},
-            $primer_clip{$well_name}->{'crispr_seq'}->{'right_crispr'}->{'seq'},
         );
         my $csv_row = join( ',' , @out_vals);
         push @out_rows, $csv_row;
@@ -754,6 +786,21 @@ sub generate_crispr_output {
     return $op;
 }
 
+sub generate_single_crispr_output {
+    my $out_rows = shift;
+    my $headers = generate_single_crispr_headers();
+
+    my $op;
+    $op = "Sequencing primers\n";
+    $op .= "WARNING: These primers are for sequencing a PCR product - no genomic check has been applied to these primers\n\n";
+    $op .= $$headers . "\n";
+    foreach my $row ( sort @{$out_rows} ) {
+         $op .= $row . "\n";
+    }
+    $op .= "End of File\n";
+    return $op;
+}
+
 sub generate_pcr_output {
     my $out_rows = shift;
     my $headers = generate_pcr_headers();
@@ -771,6 +818,7 @@ sub generate_pcr_output {
 
 sub generate_genotyping_output {
     my $out_rows = shift;
+
     my $headers = generate_genotyping_headers();
 
     my $op;
@@ -816,6 +864,33 @@ sub generate_gene_symbols_cache {
     return $design_data_cache;
 }
 
+
+sub generate_single_crispr_headers {
+
+    my @crispr_headings = (qw/
+        well_name
+        gene_symbol
+        design_id
+        strand
+        crispr_id
+        SF1
+        SF1_strand
+        SF1_length
+        SF1_gc_content
+        SF1_tm
+        SR1
+        SR1_strand
+        SF1_length
+        SR1_gc_content
+        SR1_tm
+        crispr_id
+        crispr_seq
+    /);
+
+    my $headers = join ',', @crispr_headings;
+
+    return \$headers;
+}
 
 sub generate_crispr_headers {
 
@@ -881,6 +956,7 @@ sub generate_pcr_headers {
 }
 
 sub generate_genotyping_headers {
+    my $design_oligos = shift;
 
     my @genotyping_headings = (qw/
         well_name
@@ -907,8 +983,10 @@ sub generate_genotyping_headers {
         GF2_length
         GR2_gc_content
         GR2_tm
-        5F
-        3R
+        Design_A
+        Oligo_A
+        Design_B
+        Oligo_B
     /);
 
     my $headers = join ',', @genotyping_headings;
