@@ -128,11 +128,11 @@ sub output_seq {
 
 =head1 NAME
 
-delete_design.pl - get designs deleted region sequence to design LOA primers on
+design_loa_assay_target_sequence.pl - get designs deleted region sequence to design LOA primers on
 
 =head1 SYNOPSIS
 
-  delete_design.pl [options] [file]
+  design_loa_assay_target_sequence.pl [options] [file]
 
       --help            Display a brief help message
       --man             Display the manual page
