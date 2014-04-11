@@ -128,7 +128,7 @@ sub output_seq {
 
 =head1 NAME
 
-delete_design.pl - create fasta file of designs deletion region 
+delete_design.pl - get designs deleted region sequence to design LOA primers on
 
 =head1 SYNOPSIS
 
@@ -144,9 +144,14 @@ delete_design.pl - create fasta file of designs deletion region
 
 =head1 DESCRIPTION
 
-Grab the sequence for the deleted region for a design out output in a fasta file.
+Grab the sequence for the deleted region for a design, output in a fasta file.
 In this case the deleted region means:
-    - Conditional: Between the U5 and U3 oligos ( non inclusive ).
-    - Deletion: Between the U5 and D3 oligos ( non inclusive ).
+    Conditional:
+        - Between the U5 and U3 oligos ( inclusive + 100 flanking bases ).
+        - Between the D5 and D3 oligos ( inclusive + 100 flanking bases ).
+    Deletion:
+        - Between the U5 and D3 oligos ( inclusive + 100 flanking bases ).
+
+LOA primers ( loss of allele ) can then be designed against the sequence.
 
 =cut
