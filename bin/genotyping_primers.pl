@@ -663,6 +663,7 @@ sub prepare_single_crispr_primers {
         my $gene_name;
 
         $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
+$DB::single=1;
 
         my ($crispr_left, $crispr_right) = $well->left_and_right_crispr_wells;
         my $crispr_id = $crispr_left->crispr->id;
@@ -896,7 +897,7 @@ sub generate_gene_symbols_cache {
                 $gene_name = $gene_cache->{$gene_id};
             }
             else {
-                $gene_name = $model->get_gene_symbol_for_gene_id( $gene_id, $species);
+                $gene_name = $model->find_gene( {search_term => $gene_id, species => $species});
                 $gene_cache->{$gene_id} = $gene_name;
             }
         }
