@@ -20,7 +20,7 @@ my $plate_name_param = '';
 my $plate_well_param = '';
 my $species_param = 'Human'; # default is Human TODO: assembly?
 my $crispr_type = 'pair';
-my $format = '';
+my $format_param = '';
 my @repeat_mask_param;
 
 GetOptions(
@@ -29,19 +29,18 @@ GetOptions(
     'repeat_mask=s' => \@repeat_mask_param,
     'species=s'     => \$species_param,
     'crispr_type=s' => \$crispr_type,
-    'format=s'      => \$format,
+    'format=s'      => \$format_param,
 )
-or die  "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--crispr_type=(single | pair)] [--species=(Human | Mouse)] [--repeat_mask=TRF [--repear_mask=...] (default: NONE)] --format=fsa\n";
+or die usage_message();;
 
 if ($plate_name_param eq '') {
-    die "Usage: perl genotyping_primers.pl --plate=plate_name --well=well_name [--crispr_type=(single | pair)] [--species=(Human | Mouse)] [--repeat_mask=TRF [--repeat_mask=...] (default: NONE)] --format=fsa\n";
+    die usage_message()
 }
 
 if ( scalar @repeat_mask_param == 0 ) {
     push  @repeat_mask_param,'NONE';
 }
 
-$DB::single=1;
 my $data_clip;
 if ( $plate_well_param  eq '') {
     if ( $crispr_type eq 'single' ) {
@@ -49,7 +48,7 @@ if ( $plate_well_param  eq '') {
 
     }
     else { 
-        $data_clip = primers_for_plate( $plate_name_param, \@repeat_mask_param , $species_param);
+        $data_clip = primers_for_plate( $plate_name_param, \@repeat_mask_param , $species_param );
     }
 }
 else
@@ -64,11 +63,31 @@ else
 }
 
 # If the format is specified as fsa, fasta format files will be generated for each well suitable for input to BlastN
-if ( $format eq 'fsa' ) {
+if ( $format_param eq 'fsa' ) {
+$DB::single=1;
+# Checkout $data_clip
     $logger->info('Generating blastable fasta files');
+    my $fsa_rows = generate_fsa_files( $data_clip );
 }
 
 exit;
+
+sub usage_message {
+return << "END_DIE";
+
+Usage: perl genotyping_primers.pl
+    --plate=plate_name
+    [--well=well_name]
+    [--crispr_type=(single | pair)]
+    [--species=(Human | Mouse)]
+    [--repeat_mask=TRF [--repeat_mask=...] (default: NONE)]
+    [--format=fsa]
+
+Optional parameters in square brackets
+Default species is Human
+
+END_DIE
+}
 
 # subroutines start here
 #
@@ -127,15 +146,20 @@ sub primers_for_single_crispr_plate {
     $logger->debug( 'Created design well data cache' );
 
 
-
-    my $clip = run_single_crispr_primers({
+    my $sc_params = {
             'wells' => \@wells,
             'design_data_cache' => $design_data_cache,
             'model' => $model,
             'species' => $species,
             'plate_name' => $plate_name,
             'repeat_mask' => $repeat_mask,
-        });
+        };
+
+    if ( $plate_well_input ) {
+        $sc_params->{'plate_well'} = $plate_well_input;
+    }
+
+    my $clip = run_single_crispr_primers( $sc_params );
 
     $logger->info( 'Done' );
     return $clip;
@@ -262,6 +286,7 @@ sub primers_for_plate_well {
             'species' => $species,
             'plate_name' => $plate_name,
             'repeat_mask' => $repeat_mask,
+            'plate_well' => $plate_well_input,
         });
 
     $logger->info( 'Done' );
@@ -273,13 +298,14 @@ sub primers_for_plate_well {
 
 sub run_single_crispr_primers {
     my $params = shift;
-
     my $wells = $params->{'wells'};
     my $design_data_cache = $params->{'design_data_cache'};
     my $model = $params->{'model'};
     my $species = $params->{'species'};
     my $plate_name = $params->{'plate_name'};
     my $repeat_mask= $params->{'repeat_mask'};
+
+    my $formatted_well = '_' . $params->{'plate_well'} // '';
 
     my $lines;
     $logger->debug( 'Generating gene symbol cache' );
@@ -300,7 +326,7 @@ sub run_single_crispr_primers {
         });
     $logger->debug( 'Generating single crispr primer output file' );
     $lines = generate_single_crispr_output( $out_rows );
-    create_output_file( $plate_name . '_single_crispr_primers.csv', $lines );
+    create_output_file( $plate_name . $formatted_well . '_single_crispr_primers.csv', $lines );
 
     $logger->info( 'Generating PCR primers for crispr region' );
     ($out_rows, $crispr_clip) = prepare_pcr_primers({
@@ -313,15 +339,16 @@ sub run_single_crispr_primers {
         });
     $logger->debug( 'Generating pcr primer output file' );
     $lines = generate_pcr_output( $out_rows );
-    create_output_file( $plate_name . '_pcr_primers.csv', $lines );
+    create_output_file( $plate_name . $formatted_well . '_pcr_primers.csv', $lines );
     
     # now need to add back in genotyping primers in case short range primers not found
     # could just do this for the wells that failed in pcr long range.
     # For now just operate on all wells.
     $logger->info( 'Generating genotyping primers' );
     my $design_oligos;
-    $out_rows = prepare_genotyping_primers({
+    ($out_rows, $crispr_clip) = prepare_genotyping_primers({
             'model' => $model,
+            'crispr_clip' => $crispr_clip,
             'wells' => $wells,
             'design_data_cache' => $design_data_cache,
             'species' => $species,
@@ -330,7 +357,7 @@ sub run_single_crispr_primers {
 
     $lines = generate_genotyping_output( $out_rows );
     $logger->info( 'Generating genotyping primer output file' );
-    create_output_file( $plate_name . '_genotyping_primers.csv' ,$lines );
+    create_output_file( $plate_name . $formatted_well . '_genotyping_primers.csv' ,$lines );
 
     return $crispr_clip;
 }
@@ -344,6 +371,8 @@ sub run_primers {
     my $species = $params->{'species'};
     my $plate_name = $params->{'plate_name'};
     my $repeat_mask= $params->{'repeat_mask'};
+
+    my $formatted_well = '_' . $params->{'plate_well'} // '';
 
     my $lines;
     $logger->debug( 'Generating gene symbol cache' );
@@ -364,10 +393,10 @@ sub run_primers {
         });
     $logger->debug( 'Generating crispr primer output file' );
     $lines = generate_crispr_output( $out_rows );
-    create_output_file( $plate_name . '_crispr_primers.csv', $lines );
+    create_output_file( $plate_name . $formatted_well . '_crispr_primers.csv', $lines );
 
     $logger->info( 'Generating PCR primers for crispr region' );
-    $out_rows = prepare_pcr_primers({
+    ($out_rows, $crispr_clip) = prepare_pcr_primers({
             'model' => $model,
             'crispr_clip' => $crispr_clip,
             'wells' => $wells,
@@ -377,12 +406,12 @@ sub run_primers {
         });
     $logger->debug( 'Generating pcr primer output file' );
     $lines = generate_pcr_output( $out_rows );
-    create_output_file( $plate_name . '_pcr_primers.csv', $lines );
+    create_output_file( $plate_name . $formatted_well . '_pcr_primers.csv', $lines );
 
 
     $logger->info( 'Generating genotyping primers' );
     my $design_oligos;
-    $out_rows = prepare_genotyping_primers({
+    ($out_rows, $crispr_clip) = prepare_genotyping_primers({
             'model' => $model,
             'wells' => $wells,
             'design_data_cache' => $design_data_cache,
@@ -392,7 +421,7 @@ sub run_primers {
 
     $lines = generate_genotyping_output( $out_rows );
     $logger->info( 'Generating genotyping primer output file' );
-    create_output_file( $plate_name . '_genotyping_primers.csv' ,$lines );
+    create_output_file( $plate_name . $formatted_well . '_genotyping_primers.csv' ,$lines );
 
     return;
 }
@@ -479,20 +508,21 @@ sub prepare_pcr_primers {
         my $csv_row = join( ',' , @out_vals);
         push @out_rows, $csv_row;
     }
-    return \@out_rows;
+    return \@out_rows, $crispr_clip;
 }
 
 sub prepare_genotyping_primers {
     my $params = shift;
 
     my $model = $params->{'model'};
+    my $primer_clip = $params->{'crispr_clip'};
     my $wells = $params->{'wells'};
     my $design_data_cache = $params->{'design_data_cache'};
     my $species = $params->{'species'};
     my $repeat_mask = $params->{'repeat_mask'};
 
 
-    my %primer_clip;
+#    my %primer_clip;
 
     my $design_row;
     foreach my $well ( @{$wells} ) {
@@ -514,73 +544,74 @@ sub prepare_genotyping_primers {
                 species => $species,
                 repeat_mask => $repeat_mask,
             });
-        $primer_clip{$well_name}{'gene_name'} = $gene_name;
-        $primer_clip{$well_name}{'design_id'} = $design_id;
-        $primer_clip{$well_name}{'strand'} = $chr_strand;
+        # TODO: check whether already exists first? Should have already been filled in?
+        $primer_clip->{$well_name}{'gene_name'} = $gene_name;
+        $primer_clip->{$well_name}{'design_id'} = $design_id;
+        $primer_clip->{$well_name}{'strand'} = $chr_strand;
 
-        $primer_clip{$well_name}{'genotyping_primers'} = $genotyping_mapped;
-        $primer_clip{$well_name}{'design_oligos'} = $design_oligos;
+        $primer_clip->{$well_name}{'genotyping_primers'} = $genotyping_mapped;
+        $primer_clip->{$well_name}{'design_oligos'} = $design_oligos;
     }
     my @out_rows;
     my $primer_type = 'genotyping_primers';
-    foreach my $well_name ( keys %primer_clip ) {
+    foreach my $well_name ( keys %$primer_clip ) {
         my @out_vals = (
             $well_name,
-            $primer_clip{$well_name}{'gene_name'},
-            $primer_clip{$well_name}{'design_id'},
-            $primer_clip{$well_name}{'strand'},
+            $primer_clip->{$well_name}->{'gene_name'},
+            $primer_clip->{$well_name}->{'design_id'},
+            $primer_clip->{$well_name}->{'strand'},
         );
         # Take the two highest ranking primers
-        my ($rank_a, $rank_b) = get_best_two_primer_ranks( $primer_clip{$well_name}->{$primer_type}->{'left'} );
+        my ($rank_a, $rank_b) = get_best_two_primer_ranks( $primer_clip->{$well_name}->{$primer_type}->{'left'} );
         # only need left or right as both will be the same for rank purposes
         # GF1/GR1
-        if ($primer_clip{$well_name}{'strand'} eq 'plus') {
+        if ($primer_clip->{$well_name}->{'strand'} eq 'plus') {
             push (@out_vals,
-                data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank_a // '99')
+                data_to_push($primer_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             );
             push (@out_vals, (
-                data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank_a // '99')
+                data_to_push($primer_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             ));
             # GF2/GR2
             push (@out_vals,
-                data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank_b // '99')
+                data_to_push($primer_clip, $primer_type, $well_name, 'left', $rank_b // '99')
             );
             push (@out_vals, (
-                data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank_b // '99')
+                data_to_push($primer_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             ));
         }
-        elsif ($primer_clip{$well_name}{'strand'} eq 'minus') {
+        elsif ($primer_clip->{$well_name}->{'strand'} eq 'minus') {
             push (@out_vals,
-                data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank_a // '99')
+                data_to_push($primer_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             );
             push (@out_vals, (
-                data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank_a // '99')
+                data_to_push($primer_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             ));
             # GF2/GR2
             push (@out_vals,
-                data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank_b // '99')
+                data_to_push($primer_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             );
             push (@out_vals, (
-                data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank_b // '99')
+                data_to_push($primer_clip, $primer_type, $well_name, 'left', $rank_b // '99')
             ));
 
         }
         else {
             $logger->error( 'Chromosome strand not defined.' );
         }
-        my @d_oligo_keys = sort keys %{$primer_clip{$well_name}{'design_oligos'}};
+        my @d_oligo_keys = sort keys %{$primer_clip->{$well_name}{'design_oligos'}};
         push (@out_vals,
             $d_oligo_keys[0],
-            $primer_clip{$well_name}->{'design_oligos'}->{$d_oligo_keys[0]}->{'seq'},
+            $primer_clip->{$well_name}->{'design_oligos'}->{$d_oligo_keys[0]}->{'seq'},
             $d_oligo_keys[1],
-            $primer_clip{$well_name}->{'design_oligos'}->{$d_oligo_keys[1]}->{'seq'},
+            $primer_clip->{$well_name}->{'design_oligos'}->{$d_oligo_keys[1]}->{'seq'},
         );
 
         my $csv_row = join( ',' , @out_vals);
         push @out_rows, $csv_row;
     }
 
-    return \@out_rows;
+    return \@out_rows, $primer_clip;
 }
 
 sub data_to_push {
@@ -620,7 +651,6 @@ sub prepare_single_crispr_primers {
     my $design_data_cache = $params->{'design_data_cache'};
     my $species = $params->{'species'};
     my $repeat_mask = $params->{'repeat_mask'};
-$DB::single=1;
 
     my %primer_clip;
 
@@ -755,6 +785,20 @@ sub prepare_crispr_primers {
     return (\@out_rows, \%primer_clip);
 }
 
+=head generate_fsa_file
+Generates data to output fasta format files for use with BlastN
+
+=cut
+
+sub generate_fsa_files {
+    my $clip = shift;
+
+    my @out_lines;
+
+    my @well_keys = sort keys %$clip;
+
+    return;
+}
 
 sub create_output_file {
     my $file_name = shift;
