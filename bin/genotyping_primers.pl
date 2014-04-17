@@ -64,7 +64,6 @@ else
 
 # If the format is specified as fsa, fasta format files will be generated for each well suitable for input to BlastN
 if ( $format_param eq 'fsa' ) {
-$DB::single=1;
 # Checkout $data_clip
     $logger->info('Generating blastable fasta files');
     my $fsa_rows = generate_fsa_files( $data_clip );
@@ -85,6 +84,7 @@ Usage: perl genotyping_primers.pl
 
 Optional parameters in square brackets
 Default species is Human
+Default crispr_type is pair
 
 END_DIE
 }
