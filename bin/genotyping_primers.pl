@@ -51,6 +51,8 @@ if ( scalar @repeat_mask_param == 0 ) {
     push  @repeat_mask_param,'NONE';
 }
 
+$persist_param = uc($persist_param);
+
 my $model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
 my $schema = $model->schema;
 if ($assembly_param eq '') {
@@ -554,7 +556,7 @@ sub run_single_crispr_primers {
     my $repeat_mask = $params->{'repeat_mask'};
     my $dis_designs = $params->{'dis_designs'};
 
-    my $formatted_well = exists $params->{'plate_well'} ? ('_' . $params->{'plate_well'}) : '';
+    my $formatted_well = $params->{'plate_well'} ? ('_' . $params->{'plate_well'}) : '';
 
     my $lines;
     $logger->debug( 'Generating gene symbol cache' );
@@ -625,7 +627,7 @@ sub run_primers {
     my $crispr_pair_id_inp = $params->{'crispr_pair_id'};
     my $assembly_id = $params->{'assembly_id'};
 
-    my $formatted_well = '_' . ($params->{'plate_well'} // '');
+    my $formatted_well = $params->{'plate_well'} ? ('_' . $params->{'plate_well'}) : '';
 
     my $lines;
     $logger->debug( 'Generating gene symbol cache' );
@@ -734,40 +736,39 @@ sub prepare_pcr_primers {
             push (@out_vals,
                 data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             );
-            persist_pcr_primers($model, 'PF1', $crispr_clip, $primer_type, $well_name, 'left', $rank_a, $assembly_id);
+            persist_pcr_primers($model, 'PF1', $crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99', $assembly_id);
             push (@out_vals, (
                 data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             ));
-            persist_pcr_primers($model, 'PR1', $crispr_clip, $primer_type, $well_name, 'right', $rank_a, $assembly_id);
+            persist_pcr_primers($model, 'PR1', $crispr_clip, $primer_type, $well_name, 'right', $rank_a // '99', $assembly_id);
             # second set
             push (@out_vals,
                 data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_b // '99')
             );
-            persist_pcr_primers($model, 'PF2', $crispr_clip, $primer_type, $well_name, 'left', $rank_b, $assembly_id);
+            persist_pcr_primers($model, 'PF2', $crispr_clip, $primer_type, $well_name, 'left', $rank_b // '99', $assembly_id);
             push (@out_vals, (
                 data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             ));
-            persist_pcr_primers($model, 'PR2', $crispr_clip, $primer_type, $well_name, 'left', $rank_b, $assembly_id);
+            persist_pcr_primers($model, 'PR2', $crispr_clip, $primer_type, $well_name, 'left', $rank_b // '99', $assembly_id);
         }
         elsif ($crispr_clip->{$well_name}->{'strand'} eq 'minus') {
             push (@out_vals,
                 data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             );
-            persist_pcr_primers($model, 'PF1', $crispr_clip, $primer_type, $well_name, 'right', $rank_a, $assembly_id);
-
+            persist_pcr_primers($model, 'PF1', $crispr_clip, $primer_type, $well_name, 'right', $rank_a // '99', $assembly_id);
             push (@out_vals, (
                 data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             ));
-            persist_pcr_primers($model, 'PR1', $crispr_clip, $primer_type, $well_name, 'left', $rank_a, $assembly_id);
+            persist_pcr_primers($model, 'PR1', $crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99', $assembly_id);
             # GF2/GR2
             push (@out_vals,
                 data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             );
-            persist_pcr_primers($model, 'PF2', $crispr_clip, $primer_type, $well_name, 'right', $rank_b, $assembly_id);
+            persist_pcr_primers($model, 'PF2', $crispr_clip, $primer_type, $well_name, 'right', $rank_b // '99', $assembly_id);
             push (@out_vals, (
                 data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_b // '99')
             ));
-            persist_pcr_primers($model, 'PR2', $crispr_clip, $primer_type, $well_name, 'left', $rank_b, $assembly_id);
+            persist_pcr_primers($model, 'PR2', $crispr_clip, $primer_type, $well_name, 'left', $rank_b // '99', $assembly_id);
 
         }
         else {
@@ -841,39 +842,39 @@ sub prepare_genotyping_primers {
             push (@out_vals,
                 data_to_push($primer_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             );
-            persist_gen_primers($model, 'GF1', $primer_clip, $primer_type, $well_name, 'left', $rank_a, $assembly_id);
+            persist_gen_primers($model, 'GF1', $primer_clip, $primer_type, $well_name, 'left', $rank_a // '99', $assembly_id);
             push (@out_vals, (
                 data_to_push($primer_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             ));
-            persist_gen_primers($model, 'GR1', $primer_clip, $primer_type, $well_name, 'right', $rank_a, $assembly_id);
+            persist_gen_primers($model, 'GR1', $primer_clip, $primer_type, $well_name, 'right', $rank_a // '99', $assembly_id);
             # GF2/GR2
             push (@out_vals,
                 data_to_push($primer_clip, $primer_type, $well_name, 'left', $rank_b // '99')
             );
-            persist_gen_primers($model, 'GF1', $primer_clip, $primer_type, $well_name, 'left', $rank_b, $assembly_id);
+            persist_gen_primers($model, 'GF1', $primer_clip, $primer_type, $well_name, 'left', $rank_b // '99', $assembly_id);
             push (@out_vals, (
                 data_to_push($primer_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             ));
-            persist_gen_primers($model, 'GR2', $primer_clip, $primer_type, $well_name, 'right', $rank_b, $assembly_id);
+            persist_gen_primers($model, 'GR2', $primer_clip, $primer_type, $well_name, 'right', $rank_b // '99', $assembly_id);
         }
         elsif ($primer_clip->{$well_name}->{'strand'} eq 'minus') {
             push (@out_vals,
                 data_to_push($primer_clip, $primer_type, $well_name, 'right', $rank_a // '99')
             );
-            persist_gen_primers($model, 'GF1', $primer_clip, $primer_type, $well_name, 'right', $rank_a, $assembly_id);
+            persist_gen_primers($model, 'GF1', $primer_clip, $primer_type, $well_name, 'right', $rank_a // '99', $assembly_id);
             push (@out_vals, (
                 data_to_push($primer_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             ));
-            persist_gen_primers($model, 'GR1', $primer_clip, $primer_type, $well_name, 'left', $rank_a, $assembly_id);
+            persist_gen_primers($model, 'GR1', $primer_clip, $primer_type, $well_name, 'left', $rank_a // '99', $assembly_id);
             # GF2/GR2
             push (@out_vals,
                 data_to_push($primer_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             );
-            persist_gen_primers($model, 'GF2', $primer_clip, $primer_type, $well_name, 'right', $rank_b, $assembly_id);
+            persist_gen_primers($model, 'GF2', $primer_clip, $primer_type, $well_name, 'right', $rank_b // '99', $assembly_id);
             push (@out_vals, (
                 data_to_push($primer_clip, $primer_type, $well_name, 'left', $rank_b // '99')
             ));
-            persist_gen_primers($model, 'GR2', $primer_clip, $primer_type, $well_name, 'left', $rank_b, $assembly_id);
+            persist_gen_primers($model, 'GR2', $primer_clip, $primer_type, $well_name, 'left', $rank_b // '99', $assembly_id);
         }
         else {
             $logger->error( 'Chromosome strand not defined.' );
@@ -910,15 +911,10 @@ sub data_to_push {
     );
 }
 
-=head persist_data
+=head persist_primers
 
 Write the calculated data to the store
 
-=cut
-=head
-sub persist_seq_primers {
-    return;
-}
 =cut
 
 sub persist_gen_primers {
@@ -935,9 +931,7 @@ sub persist_pcr_primers {
 
 sub persist_primers {
     #Global param check
-    return if uc($persist_param) ne 'DB';
-    return if uc($persist_param) ne 'BOTH';
-
+    return if ( $persist_param ne 'DB' && $persist_param ne 'BOTH' );
     my $model = shift;
     my $primer_label = shift;
 
@@ -949,6 +943,8 @@ sub persist_primers {
     my $assembly_id = shift;
     my $primer_class = shift;
 
+    return if ( $rank eq '99'); # no suitable primers generated
+    $logger->info("Persisting $primer_class primers for well $well_name ...");
     my $primer_name = $lr . '_' . $rank;
     my $seq = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'seq'};
     my $gc = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'gc_content'};
@@ -1104,7 +1100,7 @@ sub prepare_crispr_primers {
     my $design_data_cache = $params->{'design_data_cache'};
     my $species = $params->{'species'};
     my $repeat_mask = $params->{'repeat_mask'};
-    my $crispr_pair_id_inp = $params->{'crispr_pair_id'};
+    my $crispr_pair_id_inp = $params->{'crispr_pair_id'} // '';
     my $assembly_id = $params->{'assembly_id'};
 
     my %primer_clip;
@@ -1164,13 +1160,13 @@ sub prepare_crispr_primers {
             $primer_clip{$well_name}{'pair_id'},
         );
         push (@out_vals, (
-            data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank)
+            data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank // '99')
         ));
-        persist_seq_primers($model, 'SF1', \%primer_clip, $primer_type, $well_name, 'left', $rank, $assembly_id);
+        persist_seq_primers($model, 'SF1', \%primer_clip, $primer_type, $well_name, 'left', $rank // '99', $assembly_id);
         push (@out_vals, (
-            data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank)
+            data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank // '99')
         ));
-        persist_seq_primers($model, 'SR1', \%primer_clip, $primer_type, $well_name, 'right', $rank, $assembly_id);
+        persist_seq_primers($model, 'SR1', \%primer_clip, $primer_type, $well_name, 'right', $rank // '99', $assembly_id);
         push (@out_vals,
             $primer_clip{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'id'},
             $primer_clip{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'seq'},
