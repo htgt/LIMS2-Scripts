@@ -19,12 +19,12 @@ use LIMS2::Model::Util::OligoSelection qw(
 my $plate_name_param = '';
 my $plate_well_param = '';
 my $species_param = 'Human';
-my $assembly_param = ''; 
+my $assembly_param = '';
 my $crispr_type = 'pair';
 my $format_param = '';
 my @repeat_mask_param;
 my @d_plate_param;
-my $crispr_pair_id = '';
+my $crispr_pair_id_param = '';
 my $genotyping_primers_required = 'YES';
 my $persist_param = 'BOTH';
 
@@ -37,7 +37,7 @@ GetOptions(
     'format=s'      => \$format_param,
     'assembly=s'    => \$assembly_param,
     'd_plate=s'     => \@d_plate_param,
-    'pair_id=s'     => \$crispr_pair_id,
+    'pair_id=s'     => \$crispr_pair_id_param,
     'genotyping=s'  => \$genotyping_primers_required,
     'persist=s'     => \$persist_param,
 )
@@ -53,10 +53,10 @@ if ( scalar @repeat_mask_param == 0 ) {
 
 $persist_param = uc($persist_param);
 
-my $model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
-my $schema = $model->schema;
+my $lims2_model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
+my $lims2_schema = $lims2_model->schema;
 if ($assembly_param eq '') {
-    my $assembly_r = $schema->resultset('SpeciesDefaultAssembly')->find( { species_id => $species_param } );
+    my $assembly_r = $lims2_schema->resultset('SpeciesDefaultAssembly')->find( { species_id => $species_param } );
     $assembly_param = $assembly_r->assembly_id;
 }
 
@@ -64,45 +64,49 @@ INFO( '-------------------- New Primer Calculation Begins ----------------------
 my $data_clip;
 if ( $plate_well_param  eq '') {
     if ( $crispr_type eq 'single' ) {
-        $data_clip = primers_for_single_crispr_plate(
-            $model,
-            $plate_name_param,
-            \@repeat_mask_param,
-            \@d_plate_param,
-            $species_param,
-            $assembly_param );
+        $data_clip = primers_for_single_crispr_plate({
+            'model' => $lims2_model,
+            'plate_name' => $plate_name_param,
+            'repeat_mask_list' => \@repeat_mask_param,
+            'd_plate_list' => \@d_plate_param,
+            'species' => $species_param,
+            'assembly' => $assembly_param,
+        });
     }
-    else { 
-        $data_clip = primers_for_plate(
-            $model,
-            $plate_name_param,
-            \@repeat_mask_param,
-            $species_param,
-            $assembly_param );
+    else {
+        $data_clip = primers_for_plate({
+            'mode' => $lims2_model,
+            'plate_name' => $plate_name_param,
+            'repeat_mask_list' => \@repeat_mask_param,
+            'species' => $species_param,
+            'assembly' => $assembly_param,
+        });
     }
 }
 else
 {
     if ( $crispr_type eq 'single' ) {
         # $plate_well_param is optional here
-        $data_clip = primers_for_single_crispr_plate(
-            $model,
-            $plate_name_param,
-            \@repeat_mask_param,
-            \@d_plate_param,
-            $species_param,
-            $assembly_param,
-            $plate_well_param );
+        $data_clip = primers_for_single_crispr_plate({
+            'model' => $lims2_model,
+            'plate_name' => $plate_name_param,
+            'repeat_mask' =>\@repeat_mask_param,
+            'd_plate_list' => \@d_plate_param,
+            'species' => $species_param,
+            'assembly' => $assembly_param,
+            'plate_well' => $plate_well_param,
+        });
     }
     else {
-        $data_clip = primers_for_plate(
-            $model,
-            $plate_name_param,
-            \@repeat_mask_param,
-            $species_param,
-            $assembly_param,
-            $plate_well_param,
-            $crispr_pair_id );
+        $data_clip = primers_for_plate({
+            'model' => $lims2_model,
+            'plate_name' => $plate_name_param,
+            'repeat_mask_list' => \@repeat_mask_param,
+            'species' => $species_param,
+            'assembly' => $assembly_param,
+            'plate_well' => $plate_well_param,
+            'crispr_pair_id' => $crispr_pair_id_param,
+        });
     }
 }
 
@@ -140,13 +144,15 @@ END_DIE
 # subroutines start here
 #
 sub primers_for_single_crispr_plate {
-    my $model = shift;
-    my $plate_name_input = shift;
-    my $repeat_mask = shift;
-    my $d_plate_list = shift;
-    my $species_input = shift;
-    my $assembly_input = shift;
-    my $plate_well_input = shift;
+    my $p = shift;
+
+    my $model = $p->{'model'};
+    my $plate_name_input = $p->{'plate_name'};
+    my $repeat_mask = $p->{'repeat_mask_list'};
+    my $d_plate_list = $p->{'d_plate_list'};
+    my $species_input = $p->{'species'};
+    my $assembly_input = $p->{'assembly'};
+    my $plate_well_input = $p->{'plate_well'};
 
     my $dis_designs; # hash ref for disambiguation design list
 
@@ -166,7 +172,6 @@ sub primers_for_single_crispr_plate {
     }
 
 
-    # Probably get the design ids from a file or the command line or directly from the database.
     my $species = $species_input;
     my $assembly = $assembly_input;
 
@@ -236,13 +241,15 @@ sub primers_for_single_crispr_plate {
 }
 
 sub primers_for_plate {
-    my $model = shift;
-    my $plate_name_input = shift;
-    my $repeat_mask = shift;
-    my $species_input = shift;
-    my $assembly_input = shift;
-    my $plate_well_input = shift;
-    my $crispr_pair_id = shift;
+    my $p = shift;
+
+    my $model = $p->{'model'};
+    my $plate_name_input = $p->{'plate_name'};
+    my $repeat_mask = $p->{'repeat_mask_list'};
+    my $species_input = $p->{'species'};
+    my $assembly_input = $p->{'assembly'};
+    my $plate_well_input = $p->{'plate_well'};
+    my $crispr_pair_id = $p->{'crispr_pair_id'};
 
     $logger->info("Starting primer generation for plate $plate_name_input");
     my $rpt_string = join( ',', @$repeat_mask);
@@ -308,78 +315,6 @@ sub primers_for_plate {
     return;
 }
 
-sub primers_for_plate_well {
-    my $model = shift;
-    my $plate_name_input = shift;
-    my $plate_well_input = shift;
-    my $repeat_mask=shift;
-    my $species_input = shift;
-    my $assembly_input = shift;
-    my $crispr_pair_id = shift;
-
-    $logger->info("Starting primer generation for plate $plate_name_input well $plate_well_input");
-    my $rpt_string = join( ',', @$repeat_mask);
-    $logger->info("Using sequence repeat mask of: $rpt_string");
-
-
-    # Probably get the design ids from a file or the command line or directly from the database.
-    my $species = $species_input;
-
-    my $plate_rs = $model->schema->resultset( 'Plate' )->search(
-        {
-            'name' => $plate_name_input
-        },
-    );
-
-     if ( !$plate_rs->count ) {
-         $logger->fatal("No wells on plate or non-existent plate: $plate_name_input");
-         exit;
-     }
-
-
-    my $plate = $plate_rs->first;
-    my $plate_name = $plate->name;
-    $logger->info( 'Plate selected: ' . $plate_name );
-
-    my @wells = $plate->wells->all;
-
-    my $well_count = @wells;
-    $logger->info( 'Processing crispr primers for 1 well of ' . $well_count . ' wells:');
-    my @well_id_list;
-
-    foreach my $well ( @wells ) {
-        if ( $well->name eq $plate_well_input ) {
-            push @well_id_list, $well->id;
-        }
-    }
-
-    @wells = grep { $_->name =~ /$plate_well_input/  } @wells;
-
-    my $design_data_cache = $model->create_design_data_cache(
-            \@well_id_list,
-        );
-
-    $logger->debug( 'Created design well data cache' );
-
-
-
-    my $dc = run_primers({
-            'wells' => \@wells,
-            'design_data_cache' => $design_data_cache,
-            'model' => $model,
-            'species' => $species,
-            'assembly_id' => $assembly_input,
-            'plate_name' => $plate_name,
-            'repeat_mask' => $repeat_mask,
-            'plate_well' => $plate_well_input,
-            'crispr_pair_id' => $crispr_pair_id,
-        });
-
-    $logger->info( 'Done' );
-    return $dc;
-}
-
-##
 #
 
 sub create_d_plate_hash{
@@ -418,7 +353,7 @@ sub create_d_plate_hash{
                 \@well_id_list,
             );
 
-    return $dis_designs; 
+    return $dis_designs;
 }
 
 sub verify_and_update_design_data_cache{
@@ -436,7 +371,7 @@ sub verify_and_update_design_data_cache{
     my $changed = 0;
 
     if ( ! exists $dd_cache->{$well_id}->{'design_id'} ){
-        $logger->debug( 'No design id value found for well_id: ' . $well_id);    
+        $logger->debug( 'No design id value found for well_id: ' . $well_id);
         # get the design for the crispr
         if ( my ($design_id, $gene_id ) = get_design_for_single_crispr( $crispr_id, $dis_designs, $schema, $assembly ) ){
            $dd_cache->{$well_id}->{'design_id'} = $design_id;
@@ -444,7 +379,7 @@ sub verify_and_update_design_data_cache{
            $changed = 1;
         }
         else {
-            $logger->info( 'No design information found for well_id: ' . $well_id . 'crispr_id: ' . $crispr_id); 
+            $logger->info( 'No design information found for well_id: ' . $well_id . 'crispr_id: ' . $crispr_id);
         }
     }
 
@@ -495,25 +430,25 @@ sub get_design_for_single_crispr {
     if ($design_rs->count > 1) {
         $logger->warn('Multiple designs found for crispr_id: ' . $crispr_id);
         my $counter = 0;
-        while ( my $record = $design_rs->next ) {
+        while ( my $row = $design_rs->next ) {
             $counter++;
-            $logger->warn($counter . ': Design id: ' . $record->design_id);
+            $logger->warn($counter . ': Design id: ' . $row->design_id);
             # check which is the correct design in the disambiguation design hash
             my @design_matches = grep {
-                $_ == $record->design_id
-            } @d_dis_design_ids;            
+                $_ == $row->design_id
+            } @d_dis_design_ids;
             if ( scalar @design_matches < 1 ) {
                 $logger->warn('No disambiguation designs match');
             }
             else {
-                push @design_results, $record;
+                push @design_results, $row;
             }
         }
-        # If there was only one design record use it, otherwise disambiguation failed.
+        # If there was only one design row use it, otherwise disambiguation failed.
         if (scalar @design_results > 1 ){
             $logger->error('Disambiguation failed..');
             foreach my $design_r ( @design_results ) {
-                $logger->warn('Potential Design: ' . $design_r->design_id); 
+                $logger->warn('Potential Design: ' . $design_r->design_id);
             }
             # FIXME: temp fudge to keep things going.
             $design_data = $design_results[0];
@@ -594,7 +529,7 @@ sub run_single_crispr_primers {
     $logger->debug( 'Generating pcr primer output file' );
     $lines = generate_pcr_output( $out_rows );
     create_output_file( $plate_name . $formatted_well . '_pcr_primers.csv', $lines );
-    
+
     if ( uc($genotyping_primers_required) eq 'YES' ) {
         $logger->info( 'Generating genotyping primers' );
         my $design_oligos;
@@ -851,7 +786,7 @@ sub prepare_genotyping_primers {
             push (@out_vals,
                 data_to_push($primer_clip, $primer_type, $well_name, 'left', $rank_b // '99')
             );
-            persist_gen_primers($model, 'GF1', $primer_clip, $primer_type, $well_name, 'left', $rank_b // '99', $assembly_id);
+            persist_gen_primers($model, 'GF2', $primer_clip, $primer_type, $well_name, 'left', $rank_b // '99', $assembly_id);
             push (@out_vals, (
                 data_to_push($primer_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             ));
@@ -918,7 +853,7 @@ Write the calculated data to the store
 =cut
 
 sub persist_gen_primers {
-    return persist_primers( @_, 'genotyping' ); 
+    return persist_primers( @_, 'genotyping' );
 }
 
 sub persist_seq_primers {
@@ -952,35 +887,63 @@ sub persist_primers {
     my $chr_strand = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_strand'};
     my $chr_start = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_start'}
         + $pc->{$well_name}->{'chr_seq_start'};
-    my $chr_end = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_end'} 
+    my $chr_end = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_end'}
         + $pc->{$well_name}->{'chr_seq_start'};
     my $chr_id = $pc->{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'chr_id'}; # not the translated name
 
     my $crispr_primer_result;
     if ($primer_class eq 'genotyping' ) {
         if ( $seq ) {
-            $crispr_primer_result = $schema->resultset('GenotypingPrimer')->create({
-                'design_id'      => $pc->{$well_name}->{'design_id'},
-                'genotyping_primer_type_id'
-                                 => $primer_label,
-                'seq'            => $seq,
-                'tm'             => $tm ,
-                'gc_content'     => $gc,
-                    'genotyping_primer_loci' => [{
-                         "assembly_id" => $assembly_id,
-                         "chr_id" => $chr_id,
-                         "chr_start" => $chr_start,
-                         "chr_end" => $chr_end,
-                         "chr_strand" => $chr_strand, 
-                     }],
-            });
+            # There is no unique constraint on the GenotypingPrimer resultset.
+            # Therefore, check whether this combination already exists before updating
+            # the table
+            # This must be done in a transaction to prevent a race condition
+            my $coderef = sub {
+                my $crispr_primer_result_set =
+                    $model->schema->resultset( 'GenotypingPrimer' )->search({
+                            'design_id' => $pc->{$well_name}->{design_id},
+                            'genotyping_primer_type_id' => $primer_label, 
+                        });
+                if ($crispr_primer_result_set->count == 0 ) {
+                    $crispr_primer_result = $model->schema->resultset('GenotypingPrimer')->create({
+                    'design_id'      => $pc->{$well_name}->{'design_id'},
+                    'genotyping_primer_type_id'
+                                     => $primer_label,
+                    'seq'            => $seq,
+                    'tm'             => $tm ,
+                    'gc_content'     => $gc,
+                        'genotyping_primer_loci' => [{
+                             "assembly_id" => $assembly_id,
+                             "chr_id" => $chr_id,
+                             "chr_start" => $chr_start,
+                             "chr_end" => $chr_end,
+                             "chr_strand" => $chr_strand,
+                         }],
+                    });
+                }
+                else {
+                    $logger->warning('Genotyping design/primer already exists: '
+                        . $pc->{$well_name}->{design_id}
+                        . '/'
+                        . $primer_label
+                }
+                return $crispr_primer_result;
+            };
+            #
+            my $rs;
+            try {
+                $rs = $model->schema->txn_do( $coderef );
+            } catch {
+                my $error = shift;
+                # Transaction failed
+                die 'Something went wrong with that transaction: ' . $error;
+            };
         }
 
     }
     else {
         if ( $seq ) {
-            $crispr_primer_result = $schema->resultset('CrisprPrimer')->create({
-                'crispr_pair_id' => $pc->{$well_name}->{'pair_id'},
+            my $create_params = {
                 'primer_name'    => $primer_label,
                 'primer_seq'     => $seq,
                 'tm'             => $tm ,
@@ -990,9 +953,16 @@ sub persist_primers {
                          "chr_id" => $chr_id,
                          "chr_start" => $chr_start,
                          "chr_end" => $chr_end,
-                         "chr_strand" => $chr_strand, 
+                         "chr_strand" => $chr_strand,
                      }],
-            });
+            };
+            if ( $pc->{$well_name}->{'pair_id'} ) {
+                $create_params->{'crispr_pair_id'} = $pc->{$well_name}->{'pair_id'};
+            }
+            else {
+                $create_params->{'crispr_id'} = $pc->{$well_name}->{'crispr_id'};
+            }
+            $crispr_primer_result = $model->schema->resultset('CrisprPrimer')->create( $create_params );
         }
     }
 #  print $crispr_primer->in_storage();  ## 1 (TRUE)
@@ -1076,11 +1046,13 @@ sub prepare_single_crispr_primers {
             $primer_clip{$well_name}{'crispr_id'},
         );
         push (@out_vals, (
-            data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank)
+            data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank // '99')
         ));
+        persist_seq_primers($model, 'SF1', \%primer_clip, $primer_type, $well_name, 'left', $rank // '99', $assembly);
         push (@out_vals, (
-            data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank)
+            data_to_push(\%primer_clip, $primer_type, $well_name, 'right', $rank // '99')
         ));
+        persist_seq_primers($model, 'SR1', \%primer_clip, $primer_type, $well_name, 'right', $rank // '99', $assembly);
         push (@out_vals,
             $primer_clip{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'id'},
             $primer_clip{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'seq'},
@@ -1114,7 +1086,6 @@ sub prepare_crispr_primers {
         my $gene_name;
 
         $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
-        #FIXME: count the number of returned rows and error if multples found.
 
         my $crispr_pair_id;
         if ( $crispr_pair_id_inp eq '' ) {
@@ -1190,7 +1161,7 @@ Generates data to output fasta format files for use with BlastN
 sub generate_fsa_files {
     my $clip = shift;
 
-    my @out_lines;
+    #my @out_lines;
 
     my @well_keys = sort keys %$clip;
 
