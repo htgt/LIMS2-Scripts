@@ -75,7 +75,7 @@ if ( $plate_well_param  eq '') {
     }
     else {
         $data_clip = primers_for_plate({
-            'mode' => $lims2_model,
+            'model' => $lims2_model,
             'plate_name' => $plate_name_param,
             'repeat_mask_list' => \@repeat_mask_param,
             'species' => $species_param,
@@ -684,7 +684,7 @@ sub prepare_pcr_primers {
             push (@out_vals, (
                 data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             ));
-            persist_pcr_primers($model, 'PR2', $crispr_clip, $primer_type, $well_name, 'left', $rank_b // '99', $assembly_id);
+            persist_pcr_primers($model, 'PR2', $crispr_clip, $primer_type, $well_name, 'right', $rank_b // '99', $assembly_id);
         }
         elsif ($crispr_clip->{$well_name}->{'strand'} eq 'minus') {
             push (@out_vals,
@@ -695,7 +695,7 @@ sub prepare_pcr_primers {
                 data_to_push($crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99')
             ));
             persist_pcr_primers($model, 'PR1', $crispr_clip, $primer_type, $well_name, 'left', $rank_a // '99', $assembly_id);
-            # GF2/GR2
+            # PF2/PR2
             push (@out_vals,
                 data_to_push($crispr_clip, $primer_type, $well_name, 'right', $rank_b // '99')
             );
@@ -902,7 +902,7 @@ sub persist_primers {
                 my $crispr_primer_result_set =
                     $model->schema->resultset( 'GenotypingPrimer' )->search({
                             'design_id' => $pc->{$well_name}->{design_id},
-                            'genotyping_primer_type_id' => $primer_label, 
+                            'genotyping_primer_type_id' => $primer_label,
                         });
                 if ($crispr_primer_result_set->count == 0 ) {
                     $crispr_primer_result = $model->schema->resultset('GenotypingPrimer')->create({
@@ -926,6 +926,7 @@ sub persist_primers {
                         . $pc->{$well_name}->{design_id}
                         . '/'
                         . $primer_label
+                    );
                 }
                 return $crispr_primer_result;
             };
@@ -941,8 +942,9 @@ sub persist_primers {
         }
 
     }
-    else {
+    else { # it must be sequencing or pcr
         if ( $seq ) {
+$DB::single=1;
             my $create_params = {
                 'primer_name'    => $primer_label,
                 'primer_seq'     => $seq,
@@ -956,15 +958,59 @@ sub persist_primers {
                          "chr_strand" => $chr_strand,
                      }],
             };
+            my $search_params = ();
             if ( $pc->{$well_name}->{'pair_id'} ) {
                 $create_params->{'crispr_pair_id'} = $pc->{$well_name}->{'pair_id'};
+                $search_params->{'crispr_pair_id'} = $pc->{$well_name}->{'pair_id'};
             }
             else {
                 $create_params->{'crispr_id'} = $pc->{$well_name}->{'crispr_id'};
+                $search_params->{'crispr_id'} = $pc->{$well_name}->{'crispr_id'};
             }
-            $crispr_primer_result = $model->schema->resultset('CrisprPrimer')->create( $create_params );
+            # Can't use update_or_create, even though this is a 1-1 relationship, dbix thinks it is multi.
+            # Therefore need to check whether exists and update it myself if it does, otherwise create a new
+            # database tuple.
+            $search_params->{'primer_name'} = $primer_label;
+            my $coderef = sub {
+                my $crispr_check_r = $model->schema->resultset('CrisprPrimer')->find( $search_params );
+                if ( $crispr_check_r ) {
+                    $logger->info( 'Deleting entry for '
+                        . ($search_params->{'crispr_pair_id'} // $search_params->{'crispr_id'} )
+                        . ' label: '
+                        . $search_params->{'primer_name'}
+                        . ' from the database');
+                    if ( ! $crispr_check_r->delete ) {
+                        $logger->info( 'Unable to delete record(s) from the database' );
+                        die;
+                    }
+                }
+                $crispr_primer_result = $model->schema->resultset('CrisprPrimer')->create( $create_params );
+                if ( ! $crispr_primer_result ) {
+                    $logger->info('Unable to create crispr primer records for '
+                        . ($search_params->{'crispr_pair_id'} // $search_params->{'crispr_id'})
+                        . ' label: '
+                        . $search_params->{'primer_name'}
+                    );
+                }
+                else {
+                    $logger->info('Created '
+                        . ($search_params->{'crispr_pair_id'} // $search_params->{'crispr_id'})
+                        . ' label: '
+                        . $search_params->{'primer_name'}
+                    );
+                }
+                return $crispr_primer_result;
+            };
+            my $rs;
+            try {
+                $rs = $model->schema->txn_do( $coderef );
+            } catch {
+                my $error = shift;
+                # Transaction failed
+                die 'Something went wrong with that transaction: ' . $error;
+            };
         }
-    }
+    } # End if genotyping
 #  print $crispr_primer->in_storage();  ## 1 (TRUE)
     return $crispr_primer_result;
 }
