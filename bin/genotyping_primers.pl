@@ -27,6 +27,8 @@ my @d_plate_param;
 my $crispr_pair_id_param = '';
 my $genotyping_primers_required = 'YES';
 my $persist_param = 'BOTH';
+my $plate_crispr_left_param;
+my $plate_crispr_right_param;
 
 GetOptions(
     'plate=s'       => \$plate_name_param,
@@ -40,6 +42,8 @@ GetOptions(
     'pair_id=s'     => \$crispr_pair_id_param,
     'genotyping=s'  => \$genotyping_primers_required,
     'persist=s'     => \$persist_param,
+    'crispr_left=s'   => \$plate_crispr_left_param,
+    'crispr_right=s'  => \$plate_crispr_right_param,
 )
 or die usage_message();;
 
@@ -53,7 +57,7 @@ if ( scalar @repeat_mask_param == 0 ) {
 
 $persist_param = uc($persist_param);
 
-my $lims2_model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
+my $lims2_model = LIMS2::Model->new( { user => 'lims2' } );
 my $lims2_schema = $lims2_model->schema;
 if ($assembly_param eq '') {
     my $assembly_r = $lims2_schema->resultset('SpeciesDefaultAssembly')->find( { species_id => $species_param } );
@@ -77,6 +81,8 @@ if ( $plate_well_param  eq '') {
         $data_clip = primers_for_plate({
             'model' => $lims2_model,
             'plate_name' => $plate_name_param,
+            'plate_crispr_right' => $plate_crispr_right_param,
+            'plate_crispr_left' => $plate_crispr_left_param,
             'repeat_mask_list' => \@repeat_mask_param,
             'species' => $species_param,
             'assembly' => $assembly_param,
@@ -101,6 +107,8 @@ else
         $data_clip = primers_for_plate({
             'model' => $lims2_model,
             'plate_name' => $plate_name_param,
+            'plate_crispr_right' => $plate_crispr_right_param,
+            'plate_crispr_left' => $plate_crispr_left_param,
             'repeat_mask_list' => \@repeat_mask_param,
             'species' => $species_param,
             'assembly' => $assembly_param,
@@ -124,6 +132,8 @@ return << "END_DIE";
 
 Usage: perl genotyping_primers.pl
     --plate=plate_name
+    [--crispr_right=crispr_right_plate_name]
+    [--crispr_left=crispr_left_plate_name]
     [--well=well_name]
     [--crispr_type=(single | pair)]
     [--species=(Human | Mouse)]
@@ -132,11 +142,12 @@ Usage: perl genotyping_primers.pl
     [--format=fsa]
     [--d_plate=plate_name [--d_plate=...]] (default: no plates) These plates hold a list of designs used for multi-design disambiguation
     [--genotyping=[YES | NO] (default: YES)
-    [--persist= [file | db | both]
+    [--persist= [file | db | both] (default: both)
 
 Optional parameters in square brackets
 Default species is Human
 Default crispr_type is pair
+If you do not supply crispr_left/crispr_right plates, the script tries to ascend the crispr_v hierarchy to find the crispr_pair_ids
 
 END_DIE
 }
@@ -250,6 +261,8 @@ sub primers_for_plate {
     my $assembly_input = $p->{'assembly'};
     my $plate_well_input = $p->{'plate_well'};
     my $crispr_pair_id = $p->{'crispr_pair_id'};
+    my $plate_crispr_right = $p->{'plate_crispr_right'};
+    my $plate_crispr_left = $p->{'plate_crispr_left'};
 
     $logger->info("Starting primer generation for plate $plate_name_input");
     my $rpt_string = join( ',', @$repeat_mask);
@@ -309,6 +322,8 @@ sub primers_for_plate {
             'assembly_id' => $assembly_input,
             'plate_well' => $plate_well_input,
             'crispr_pair_id' => $crispr_pair_id,
+            'plate_crispr_right' => $plate_crispr_right,
+            'plate_crispr_left' => $plate_crispr_left,
         });
 
     $logger->info( 'Done' );
@@ -558,6 +573,8 @@ sub run_primers {
     my $model = $params->{'model'};
     my $species = $params->{'species'};
     my $plate_name = $params->{'plate_name'};
+    my $plate_crispr_left = $params->{'plate_crispr_left'};
+    my $plate_crispr_right = $params->{'plate_crispr_right'};
     my $repeat_mask= $params->{'repeat_mask'};
     my $crispr_pair_id_inp = $params->{'crispr_pair_id'};
     my $assembly_id = $params->{'assembly_id'};
@@ -582,6 +599,8 @@ sub run_primers {
             'repeat_mask' => $repeat_mask,
             'crispr_pair_id' => $crispr_pair_id_inp,
             'assembly_id' => $assembly_id,
+            'plate_crispr_left' => $plate_crispr_left,
+            'plate_crispr_right' => $plate_crispr_right,
         });
     $logger->debug( 'Generating crispr primer output file' );
     $lines = generate_crispr_output( $out_rows );
@@ -886,9 +905,9 @@ sub persist_primers {
     my $tm = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'melting_temp'};
     my $chr_strand = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_strand'};
     my $chr_start = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_start'}
-        + $pc->{$well_name}->{'chr_seq_start'};
+        + $pc->{$well_name}->{'chr_seq_start'} - 1;
     my $chr_end = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_end'}
-        + $pc->{$well_name}->{'chr_seq_start'};
+        + $pc->{$well_name}->{'chr_seq_start'} - 1;
     my $chr_id = $pc->{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'chr_id'}; # not the translated name
 
     my $crispr_primer_result;
@@ -922,7 +941,7 @@ sub persist_primers {
                     });
                 }
                 else {
-                    $logger->warning('Genotyping design/primer already exists: '
+                    $logger->warn('Genotyping design/primer already exists: '
                         . $pc->{$well_name}->{design_id}
                         . '/'
                         . $primer_label
@@ -944,7 +963,6 @@ sub persist_primers {
     }
     else { # it must be sequencing or pcr
         if ( $seq ) {
-$DB::single=1;
             my $create_params = {
                 'primer_name'    => $primer_label,
                 'primer_seq'     => $seq,
@@ -1120,8 +1138,11 @@ sub prepare_crispr_primers {
     my $repeat_mask = $params->{'repeat_mask'};
     my $crispr_pair_id_inp = $params->{'crispr_pair_id'} // '';
     my $assembly_id = $params->{'assembly_id'};
-
+    my $plate_crispr_left = $params->{'plate_crispr_left'};
+    my $plate_crispr_right = $params->{'plate_crispr_right'};
     my %primer_clip;
+
+    my $crispr_pair_id_cache = generate_crispr_pair_id_cache($model, $plate_crispr_left, $plate_crispr_right);
 
     my $design_row;
     foreach my $well ( @{$wells} ) {
@@ -1135,10 +1156,12 @@ sub prepare_crispr_primers {
 
         my $crispr_pair_id;
         if ( $crispr_pair_id_inp eq '' ) {
-
+            # Get the pair information by resolving the left and right crispr plate information
+            if ( $crispr_pair_id_cache->{$well_name} ) {
+                $crispr_pair_id = $crispr_pair_id_cache->{$well_name}->{'crispr_pair_id'};
+            }
             # Get the crispr_pair and thence its id from the well
-
-            if ( my $crispr_pair = $well->crispr_pair ) {
+            elsif ( my $crispr_pair = $well->crispr_pair ) {
                 $crispr_pair_id = $crispr_pair->id;
             }
         }
@@ -1456,4 +1479,72 @@ sub generate_genotyping_headers {
     my $headers = join ',', @genotyping_headings;
 
     return \$headers;
+}
+
+sub generate_crispr_pair_id_cache {
+    my $model = shift;
+    my $plate_crispr_left = shift;
+    my $plate_crispr_right = shift;
+
+    my $crispr_left_rs;
+    my $crispr_right_rs;
+    my $cache = ();
+
+    if ( $plate_crispr_left ) {
+       $crispr_left_rs = $model->schema->resultset( 'Plate' )->search({
+            'name' => $plate_crispr_left,
+       });
+    }
+    if ( $plate_crispr_right ) {
+        $crispr_right_rs = $model->schema->resultset( 'Plate' )->search({
+            'name' => $plate_crispr_right,
+            });
+    }
+    else {
+        return $cache;
+    }
+
+    my $crispr_left_r = $crispr_left_rs->first;
+    my $crispr_left_plate_name = $crispr_left_r->name;
+    $logger->info( 'Crispr Left plate name retrieved: ' . $crispr_left_plate_name );
+
+    my $crispr_right_r = $crispr_right_rs->first;
+    my $crispr_right_plate_name = $crispr_right_r->name;
+    $logger->info( 'Crispr Right plate name retrieved: ' . $crispr_right_plate_name );
+
+    my @left_wells = $crispr_left_r->wells->all;
+    $logger->info( 'Plate: ' . $crispr_left_plate_name .' - ' . @left_wells . ' wells retrieved');
+    my @right_wells = $crispr_right_r->wells->all;
+    $logger->info( 'Plate: ' . $crispr_right_plate_name .' - ' . @right_wells . ' wells retrieved');
+
+
+    foreach my $left_well ( @left_wells ) {
+        my $left_crispr_data;
+        my $left_process_crispr = $left_well->process_output_wells->first->process->process_crispr;
+        if ( $left_process_crispr ) {
+            $left_crispr_data = $left_process_crispr->crispr->as_hash;
+        }
+        my $right_crispr_data;
+        my ($right_well) = grep { $_->name eq $left_well->name } @right_wells;
+
+        my $right_process_crispr = $right_well->process_output_wells->first->process->process_crispr;
+        if ( $right_process_crispr ) {
+            $right_crispr_data = $right_process_crispr->crispr->as_hash;
+        }
+
+        my $left_crispr_id = $left_crispr_data->{'id'};
+        my $right_crispr_id = $right_crispr_data->{'id'};
+
+        my $crispr_pair = $model->schema->resultset( 'CrisprPair' )->find({
+           'left_crispr_id' => $left_crispr_id,
+           'right_crispr_id' => $right_crispr_id,
+        });
+
+
+        $cache->{$left_well->name} = {
+            'crispr_pair_id' =>  $crispr_pair->id,
+        };
+    }
+    return $cache;
+
 }
