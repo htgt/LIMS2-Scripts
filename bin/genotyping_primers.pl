@@ -159,7 +159,7 @@ sub primers_for_single_crispr_plate {
 
     my $model = $p->{'model'};
     my $plate_name_input = $p->{'plate_name'};
-    my $repeat_mask = $p->{'repeat_mask_list'};
+    my $repeat_mask = $p->{'repeat_mask'};
     my $d_plate_list = $p->{'d_plate_list'};
     my $species_input = $p->{'species'};
     my $assembly_input = $p->{'assembly'};
