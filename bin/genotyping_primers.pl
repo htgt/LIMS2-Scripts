@@ -654,12 +654,14 @@ sub prepare_pcr_primers {
     my $assembly_id = $params->{'assembly_id'};
 
     foreach my $well ( @{$wells} ) {
+
         my $well_id = $well->id;
         my $well_name = $well->name;
 
         my $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
 
         $logger->info( 'crispr_pcr: ' . $well_name . "\t(" . $gene_name . ')' );
+        next if $crispr_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
 
         my ($crispr_pcr_primers, $crispr_pcr_mapped, $chr_seq_start)
             = LIMS2::Model::Util::OligoSelection::pick_crispr_PCR_primers( {
@@ -674,6 +676,7 @@ sub prepare_pcr_primers {
 
     }
     my @out_rows;
+    my $csv_row;
     my $primer_type = 'crispr_pcr_primers';
     foreach my $well_name ( keys %{$crispr_clip} ) {
         my @out_vals = (
@@ -682,6 +685,13 @@ sub prepare_pcr_primers {
             $crispr_clip->{$well_name}->{'design_id'} // 'not set',
             $crispr_clip->{$well_name}->{'strand'} // 'not set',
         );
+        if ( $crispr_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass' ){
+
+            $csv_row = join( ',' , @out_vals);
+            push @out_rows, $csv_row;
+            
+            next;
+        }
         # Take the two highest ranking primers
         my ($rank_a, $rank_b) = get_best_two_primer_ranks( $crispr_clip->{$well_name}->{$primer_type}->{'left'} );
         # only need left or right as both will be the same for rank purposes
@@ -730,7 +740,7 @@ sub prepare_pcr_primers {
         }
         # Anything after here for context only
 
-        my $csv_row = join( ',' , @out_vals);
+        $csv_row = join( ',' , @out_vals);
         push @out_rows, $csv_row;
     }
     return \@out_rows, $crispr_clip;
@@ -761,6 +771,7 @@ sub prepare_genotyping_primers {
         $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
 
         $logger->info( $design_id . "\t(" . $gene_name . ')' );
+        next if $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
 
         my ($genotyping_primers, $genotyping_mapped, $chr_strand, $design_oligos, $chr_seq_start)
             = LIMS2::Model::Util::OligoSelection::pick_genotyping_primers( {
@@ -780,6 +791,7 @@ sub prepare_genotyping_primers {
         $primer_clip->{$well_name}{'chr_seq_start'} = $chr_seq_start; # This changes for each call
     }
     my @out_rows;
+    my $csv_row;
     my $primer_type = 'genotyping_primers';
     foreach my $well_name ( keys %$primer_clip ) {
         my @out_vals = (
@@ -788,6 +800,13 @@ sub prepare_genotyping_primers {
             $primer_clip->{$well_name}->{'design_id'},
             $primer_clip->{$well_name}->{'strand'},
         );
+        if ( $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass' ){
+
+            $csv_row = join( ',' , @out_vals);
+            push @out_rows, $csv_row;
+            
+            next;
+        }
         # Take the two highest ranking primers
         my ($rank_a, $rank_b) = get_best_two_primer_ranks( $primer_clip->{$well_name}->{$primer_type}->{'left'} );
         # only need left or right as both will be the same for rank purposes
@@ -841,7 +860,7 @@ sub prepare_genotyping_primers {
             $primer_clip->{$well_name}->{'design_oligos'}->{$d_oligo_keys[1]}->{'seq'},
         );
 
-        my $csv_row = join( ',' , @out_vals);
+        $csv_row = join( ',' , @out_vals);
         push @out_rows, $csv_row;
     }
 
@@ -1172,11 +1191,11 @@ sub prepare_crispr_primers {
         $logger->info( "$design_id\t$gene_name\tcrispr_pair_id:\t$crispr_pair_id" );
 
         my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_crispr_primers( {
-                schema => $model->schema,
-                design_id => $design_id,
-                crispr_pair_id => $crispr_pair_id,
-                species => $species,
-                repeat_mask => $repeat_mask,
+                'schema' => $model->schema,
+                'design_id' => $design_id,
+                'crispr_pair_id' => $crispr_pair_id,
+                'species' => $species,
+                'repeat_mask' => $repeat_mask,
             });
         $primer_clip{$well_name}{'pair_id'} = $crispr_pair_id;
         $primer_clip{$well_name}{'gene_name'} = $gene_name;
