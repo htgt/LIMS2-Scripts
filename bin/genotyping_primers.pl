@@ -100,7 +100,7 @@ else
         $data_clip = primers_for_single_crispr_plate({
             'model' => $lims2_model,
             'plate_name' => $plate_name_param,
-            'repeat_mask' =>\@repeat_mask_param,
+            'repeat_mask_list' =>\@repeat_mask_param,
             'd_plate_list' => \@d_plate_param,
             'species' => $species_param,
             'assembly' => $assembly_param,
@@ -165,7 +165,7 @@ sub primers_for_single_crispr_plate {
 
     my $model = $p->{'model'};
     my $plate_name_input = $p->{'plate_name'};
-    my $repeat_mask = $p->{'repeat_mask'};
+    my $repeat_mask = $p->{'repeat_mask_list'};
     my $d_plate_list = $p->{'d_plate_list'};
     my $species_input = $p->{'species'};
     my $assembly_input = $p->{'assembly'};
