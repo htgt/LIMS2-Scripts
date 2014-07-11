@@ -26,6 +26,8 @@ my @repeat_mask_param;
 my @d_plate_param;
 my $crispr_pair_id_param = '';
 my $genotyping_primers_required = 'YES';
+my $crispr_primers_required = 'YES';
+my $pcr_primers_required = 'YES';
 my $persist_param = 'BOTH';
 my $plate_crispr_left_param;
 my $plate_crispr_right_param;
@@ -40,7 +42,9 @@ GetOptions(
     'assembly=s'    => \$assembly_param,
     'd_plate=s'     => \@d_plate_param,
     'pair_id=s'     => \$crispr_pair_id_param,
-    'genotyping=s'  => \$genotyping_primers_required,
+    'genotyping_primers=s'  => \$genotyping_primers_required,
+    'crispr_primers=s'  => \$crispr_primers_required,
+    'pcr_primers=s'  => \$pcr_primers_required,
     'persist=s'     => \$persist_param,
     'crispr_left=s'   => \$plate_crispr_left_param,
     'crispr_right=s'  => \$plate_crispr_right_param,
@@ -141,7 +145,9 @@ Usage: perl genotyping_primers.pl
     [--repeat_mask=TRF [--repeat_mask=...] (default: NONE)]
     [--format=fsa]
     [--d_plate=plate_name [--d_plate=...]] (default: no plates) These plates hold a list of designs used for multi-design disambiguation
-    [--genotyping=[YES | NO] (default: YES)
+    [--genotyping_primers=[YES | NO] (default: YES)
+    [--crispr_primers=[YES | NO] (default: YES)
+    [--pcr_primers=[YES | NO] (default: YES)
     [--persist= [file | db | both] (default: both)
 
 Optional parameters in square brackets
@@ -517,33 +523,44 @@ sub run_single_crispr_primers {
             'species' => $species,
             'model' => $model,
         });
-    $logger->debug( 'Preparing crispr primers');
-    my ($out_rows, $crispr_clip ) = prepare_single_crispr_primers({
-            'model' => $model,
-            'wells' => $wells,
-            'design_data_cache' => $design_data_cache,
-            'species' => $species,
-            'assembly' => $assembly,
-            'repeat_mask' => $repeat_mask,
-            'dis_designs' => $dis_designs,
-        });
-    $logger->debug( 'Generating single crispr primer output file' );
-    $lines = generate_single_crispr_output( $out_rows );
-    create_output_file( $plate_name . $formatted_well . '_single_crispr_primers.csv', $lines );
+     my ($out_rows, $crispr_clip );
+     if ( uc($crispr_primers_required) eq 'YES' ) {
+        $logger->debug( 'Preparing crispr primers');
+        ($out_rows, $crispr_clip ) = prepare_single_crispr_primers({
+                'model' => $model,
+                'wells' => $wells,
+                'design_data_cache' => $design_data_cache,
+                'species' => $species,
+                'assembly' => $assembly,
+                'repeat_mask' => $repeat_mask,
+                'dis_designs' => $dis_designs,
+            });
+        $logger->debug( 'Generating single crispr primer output file' );
+        $lines = generate_single_crispr_output( $out_rows );
+        create_output_file( $plate_name . $formatted_well . '_single_crispr_primers.csv', $lines );
+    }
+    else {
+        $logger->info( 'Crispr primers not required' );
+    }
 
-    $logger->info( 'Generating PCR primers for crispr region' );
-    ($out_rows, $crispr_clip) = prepare_pcr_primers({
-            'model' => $model,
-            'crispr_clip' => $crispr_clip,
-            'wells' => $wells,
-            'design_data_cache' => $design_data_cache,
-            'species' => $species,
-            'repeat_mask' => $repeat_mask,
-            'assembly_id' => $assembly,
-        });
-    $logger->debug( 'Generating pcr primer output file' );
-    $lines = generate_pcr_output( $out_rows );
-    create_output_file( $plate_name . $formatted_well . '_pcr_primers.csv', $lines );
+    if ( uc($pcr_primers_required) eq 'YES' ) {
+        $logger->info( 'Generating PCR primers for crispr region' );
+        ($out_rows, $crispr_clip) = prepare_pcr_primers({
+                'model' => $model,
+                'crispr_clip' => $crispr_clip,
+                'wells' => $wells,
+                'design_data_cache' => $design_data_cache,
+                'species' => $species,
+                'repeat_mask' => $repeat_mask,
+                'assembly_id' => $assembly,
+            });
+        $logger->debug( 'Generating pcr primer output file' );
+        $lines = generate_pcr_output( $out_rows );
+        create_output_file( $plate_name . $formatted_well . '_pcr_primers.csv', $lines );
+    }
+    else {
+        $logger->info( 'PCR primers not required' );
+    }
 
     if ( uc($genotyping_primers_required) eq 'YES' ) {
         $logger->info( 'Generating genotyping primers' );
@@ -562,6 +579,10 @@ sub run_single_crispr_primers {
         $logger->info( 'Generating genotyping primer output file' );
         create_output_file( $plate_name . $formatted_well . '_genotyping_primers.csv' ,$lines );
     }
+    else {
+        $logger->info( 'Genotyping primers not required' );
+    }
+
     return $crispr_clip;
 }
 
@@ -590,36 +611,46 @@ sub run_primers {
             'species' => $species,
             'model' => $model,
         });
-    $logger->debug( 'Preparing crispr primers');
-    my ($out_rows, $crispr_clip ) = prepare_crispr_primers({
-            'model' => $model,
-            'wells' => $wells,
-            'design_data_cache' => $design_data_cache,
-            'species' => $species,
-            'repeat_mask' => $repeat_mask,
-            'crispr_pair_id' => $crispr_pair_id_inp,
-            'assembly_id' => $assembly_id,
-            'plate_crispr_left' => $plate_crispr_left,
-            'plate_crispr_right' => $plate_crispr_right,
-        });
-    $logger->debug( 'Generating crispr primer output file' );
-    $lines = generate_crispr_output( $out_rows );
-    create_output_file( $plate_name . $formatted_well . '_crispr_primers.csv', $lines );
+    my ($out_rows, $crispr_clip ); 
+    if ( uc($crispr_primers_required) eq 'YES') {
+        $logger->debug( 'Preparing crispr primers');
+        ($out_rows, $crispr_clip ) = prepare_crispr_primers({
+                'model' => $model,
+                'wells' => $wells,
+                'design_data_cache' => $design_data_cache,
+                'species' => $species,
+                'repeat_mask' => $repeat_mask,
+                'crispr_pair_id' => $crispr_pair_id_inp,
+                'assembly_id' => $assembly_id,
+                'plate_crispr_left' => $plate_crispr_left,
+                'plate_crispr_right' => $plate_crispr_right,
+            });
+        $logger->debug( 'Generating crispr primer output file' );
+        $lines = generate_crispr_output( $out_rows );
+        create_output_file( $plate_name . $formatted_well . '_crispr_primers.csv', $lines );
+    }
+    else {
+        $logger->info( 'Crispr primers not required' );
+    }
 
-    $logger->info( 'Generating PCR primers for crispr region' );
-    ($out_rows, $crispr_clip) = prepare_pcr_primers({
-            'model' => $model,
-            'crispr_clip' => $crispr_clip,
-            'wells' => $wells,
-            'design_data_cache' => $design_data_cache,
-            'species' => $species,
-            'repeat_mask' => $repeat_mask,
-            'assembly_id' => $assembly_id,
-        });
-    $logger->debug( 'Generating pcr primer output file' );
-    $lines = generate_pcr_output( $out_rows );
-    create_output_file( $plate_name . $formatted_well . '_pcr_primers.csv', $lines );
-
+    if ( uc($pcr_primers_required) eq 'YES') {
+        $logger->info( 'Generating PCR primers for crispr region' );
+        ($out_rows, $crispr_clip) = prepare_pcr_primers({
+                'model' => $model,
+                'crispr_clip' => $crispr_clip,
+                'wells' => $wells,
+                'design_data_cache' => $design_data_cache,
+                'species' => $species,
+                'repeat_mask' => $repeat_mask,
+                'assembly_id' => $assembly_id,
+            });
+        $logger->debug( 'Generating pcr primer output file' );
+        $lines = generate_pcr_output( $out_rows );
+        create_output_file( $plate_name . $formatted_well . '_pcr_primers.csv', $lines );
+    }
+    else {
+        $logger->info( 'PCR primers not required' );
+    }
 
     if ( uc($genotyping_primers_required) eq 'YES') {
         $logger->info( 'Generating genotyping primers' );
@@ -638,6 +669,10 @@ sub run_primers {
         $logger->info( 'Generating genotyping primer output file' );
         create_output_file( $plate_name . $formatted_well . '_genotyping_primers.csv' ,$lines );
     }
+    else {
+        $logger->info( 'Genotyping primers not required' );
+    }
+
     return $crispr_clip;
 }
 
@@ -1189,6 +1224,11 @@ sub prepare_crispr_primers {
         }
 
         $logger->info( "$design_id\t$gene_name\tcrispr_pair_id:\t$crispr_pair_id" );
+        # Check whether there are already primers available for this crispr_pair_id
+        if ( check_primers_for_crispr_pair_id( $model, $crispr_pair_id )->count > 0 ) {
+            $logger->warn( '++++++++ primers already exist for crispr_pair_id: ' . $crispr_pair_id );
+            # TODO: Add code to alter persistence behaviour
+        }
 
         my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_crispr_primers( {
                 'schema' => $model->schema,
@@ -1208,6 +1248,7 @@ sub prepare_crispr_primers {
     }
 
     my @out_rows;
+    my $csv_row;
     my $rank = 0; # always show the rank 0 primer
     my $primer_type = 'crispr_primers';
     foreach my $well_name ( keys %primer_clip ) {
@@ -1218,6 +1259,19 @@ sub prepare_crispr_primers {
             $primer_clip{$well_name}{'strand'},
             $primer_clip{$well_name}{'pair_id'},
         );
+        if ( $primer_clip{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass' ){
+            push @out_vals
+                , 'primer3_explain_left'
+                , $primer_clip{$well_name}->{'crispr_primers'}->{'primer3_explain_left'}
+                , 'primer3_explain_right'
+                , $primer_clip{$well_name}->{'crispr_primers'}->{'primer3_explain_right'};
+
+            $csv_row = join( ',' , @out_vals);
+            push @out_rows, $csv_row;
+            
+            next;
+        }
+
         push (@out_vals, (
             data_to_push(\%primer_clip, $primer_type, $well_name, 'left', $rank // '99')
         ));
@@ -1239,6 +1293,30 @@ sub prepare_crispr_primers {
     }
 
     return (\@out_rows, \%primer_clip);
+}
+
+
+=head check_primers_for_crispr_pair_id( $model, $crispr_pair_id )
+Given:
+    model,
+    crispr_pair_id
+
+Returns:
+    resultset
+
+Look up db entry for primers for this crispr_pair_id
+
+=cut
+
+sub check_primers_for_crispr_pair_id {
+    my $model = shift;
+    my $crispr_pair_id = shift;
+
+    my $crispr_primers_rs = $model->schema->resultset('CrisprPrimer')->search({
+        'crispr_pair_id' => $crispr_pair_id,
+    });
+
+    return $crispr_primers_rs;
 }
 
 =head generate_fsa_file
