@@ -1117,6 +1117,15 @@ sub prepare_single_crispr_primers {
         $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
         $logger->info( "$design_id\t$gene_name\tcrispr_id:\t$crispr_id" );
 
+        if ( check_primers_for_crispr_id( $model, $crispr_id )->count > 0 ) {
+            $logger->warn( '++++++++ primers already exist for crispr_id: ' . $crispr_id );
+            # TODO: Add code to alter persistence behaviour
+        }
+        else {
+            $logger->info( '-------- primers not available in the database' );
+        }
+
+
         my ($crispr_results, $crispr_primers, $chr_strand) = LIMS2::Model::Util::OligoSelection::pick_single_crispr_primers( {
                 schema => $model->schema,
                 design_id => $design_id,
@@ -1299,6 +1308,18 @@ sub check_primers_for_crispr_pair_id {
 
     return $crispr_primers_rs;
 }
+
+sub check_primers_for_crispr_id {
+    my $model = shift;
+    my $crispr_id = shift;
+
+    my $crispr_primers_rs = $model->schema->resultset('CrisprPrimer')->search({
+        'crispr_pair_id' => $crispr_id,
+    });
+
+    return $crispr_primers_rs;
+}
+
 
 =head generate_fsa_file
 Generates data to output fasta format files for use with BlastN
