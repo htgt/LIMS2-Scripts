@@ -1126,7 +1126,7 @@ sub prepare_single_crispr_primers {
         }
 
 
-        my ($crispr_results, $crispr_primers, $chr_strand) = LIMS2::Model::Util::OligoSelection::pick_single_crispr_primers( {
+        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_single_crispr_primers( {
                 schema => $model->schema,
                 design_id => $design_id,
                 crispr_id => $crispr_id,
@@ -1140,6 +1140,7 @@ sub prepare_single_crispr_primers {
 
         $primer_clip{$well_name}{'crispr_seq'} = $crispr_results;
         $primer_clip{$well_name}{'crispr_primers'} = $crispr_primers;
+        $primer_clip{$well_name}{'chr_seq_start'} = $chr_seq_start;
     }
 
     my @out_rows;
