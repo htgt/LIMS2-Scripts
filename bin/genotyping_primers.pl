@@ -100,7 +100,7 @@ else
         $data_clip = primers_for_single_crispr_plate({
             'model' => $lims2_model,
             'plate_name' => $plate_name_param,
-            'repeat_mask' =>\@repeat_mask_param,
+            'repeat_mask_list' =>\@repeat_mask_param,
             'd_plate_list' => \@d_plate_param,
             'species' => $species_param,
             'assembly' => $assembly_param,
@@ -165,7 +165,7 @@ sub primers_for_single_crispr_plate {
 
     my $model = $p->{'model'};
     my $plate_name_input = $p->{'plate_name'};
-    my $repeat_mask = $p->{'repeat_mask'};
+    my $repeat_mask = $p->{'repeat_mask_list'};
     my $d_plate_list = $p->{'d_plate_list'};
     my $species_input = $p->{'species'};
     my $assembly_input = $p->{'assembly'};
@@ -1136,7 +1136,16 @@ sub prepare_single_crispr_primers {
         $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
         $logger->info( "$design_id\t$gene_name\tcrispr_id:\t$crispr_id" );
 
-        my ($crispr_results, $crispr_primers, $chr_strand) = LIMS2::Model::Util::OligoSelection::pick_single_crispr_primers( {
+        if ( check_primers_for_crispr_id( $model, $crispr_id )->count > 0 ) {
+            $logger->warn( '++++++++ primers already exist for crispr_id: ' . $crispr_id );
+            # TODO: Add code to alter persistence behaviour
+        }
+        else {
+            $logger->info( '-------- primers not available in the database' );
+        }
+
+
+        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_single_crispr_primers( {
                 schema => $model->schema,
                 design_id => $design_id,
                 crispr_id => $crispr_id,
@@ -1150,6 +1159,7 @@ sub prepare_single_crispr_primers {
 
         $primer_clip{$well_name}{'crispr_seq'} = $crispr_results;
         $primer_clip{$well_name}{'crispr_primers'} = $crispr_primers;
+        $primer_clip{$well_name}{'chr_seq_start'} = $chr_seq_start;
     }
 
     my @out_rows;
@@ -1318,6 +1328,18 @@ sub check_primers_for_crispr_pair_id {
 
     return $crispr_primers_rs;
 }
+
+sub check_primers_for_crispr_id {
+    my $model = shift;
+    my $crispr_id = shift;
+
+    my $crispr_primers_rs = $model->schema->resultset('CrisprPrimer')->search({
+        'crispr_pair_id' => $crispr_id,
+    });
+
+    return $crispr_primers_rs;
+}
+
 
 =head generate_fsa_file
 Generates data to output fasta format files for use with BlastN
