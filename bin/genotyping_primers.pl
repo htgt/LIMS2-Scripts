@@ -28,9 +28,10 @@ my $crispr_pair_id_param = '';
 my $genotyping_primers_required = 'YES';
 my $crispr_primers_required = 'YES';
 my $pcr_primers_required = 'YES';
-my $persist_param = 'BOTH';
+my $persist_param = 'BOTH'; # By default create csv files and update the database (subject to update_data_param)
 my $plate_crispr_left_param;
 my $plate_crispr_right_param;
+my $update_data_param = 'NO'; # Don't update existing database data by default
 
 GetOptions(
     'plate=s'       => \$plate_name_param,
@@ -48,6 +49,7 @@ GetOptions(
     'persist=s'     => \$persist_param,
     'crispr_left=s'   => \$plate_crispr_left_param,
     'crispr_right=s'  => \$plate_crispr_right_param,
+    'update_data=s'  => \$update_data_param,
 )
 or die usage_message();;
 
@@ -60,6 +62,7 @@ if ( scalar @repeat_mask_param == 0 ) {
 }
 
 $persist_param = uc($persist_param);
+$update_data_param = uc($update_data_param);
 
 my $lims2_model = LIMS2::Model->new( { user => 'lims2' } );
 my $lims2_schema = $lims2_model->schema;
@@ -149,6 +152,7 @@ Usage: perl genotyping_primers.pl
     [--crispr_primers=[YES | NO] (default: YES)
     [--pcr_primers=[YES | NO] (default: YES)
     [--persist= [file | db | both] (default: both)
+    [--update_data=[YES | NO] (default: NO) determines whether or not to update existing pcr/seq primers in the database
 
 Optional parameters in square brackets
 Default species is Human
@@ -1026,7 +1030,7 @@ sub persist_primers {
             $search_params->{'primer_name'} = $primer_label;
             my $coderef = sub {
                 my $crispr_check_r = $model->schema->resultset('CrisprPrimer')->find( $search_params );
-                if ( $crispr_check_r ) {
+                if ( $crispr_check_r && ( $update_data_param eq 'YES' )) {
                     $logger->info( 'Deleting entry for '
                         . ($search_params->{'crispr_pair_id'} // $search_params->{'crispr_id'} )
                         . ' label: '
@@ -1037,20 +1041,25 @@ sub persist_primers {
                         die;
                     }
                 }
-                $crispr_primer_result = $model->schema->resultset('CrisprPrimer')->create( $create_params );
-                if ( ! $crispr_primer_result ) {
-                    $logger->info('Unable to create crispr primer records for '
-                        . ($search_params->{'crispr_pair_id'} // $search_params->{'crispr_id'})
-                        . ' label: '
-                        . $search_params->{'primer_name'}
-                    );
+                if ( ! $crispr_check_r ) {
+                    $crispr_primer_result = $model->schema->resultset('CrisprPrimer')->create( $create_params );
+                    if ( ! $crispr_primer_result ) {
+                        $logger->info('Unable to create crispr primer records for '
+                            . ($search_params->{'crispr_pair_id'} // $search_params->{'crispr_id'})
+                            . ' label: '
+                            . $search_params->{'primer_name'}
+                        );
+                    }
+                    else {
+                        $logger->info('Created '
+                            . ($search_params->{'crispr_pair_id'} // $search_params->{'crispr_id'})
+                            . ' label: '
+                            . $search_params->{'primer_name'}
+                        );
+                    }
                 }
                 else {
-                    $logger->info('Created '
-                        . ($search_params->{'crispr_pair_id'} // $search_params->{'crispr_id'})
-                        . ' label: '
-                        . $search_params->{'primer_name'}
-                    );
+                        $logger->info('Existing data prevented update - use the --update_data=YES parameter to override');
                 }
                 return $crispr_primer_result;
             };
