@@ -92,7 +92,7 @@ ENSMUSE00000682630 ENSMUSE00000682629 ENSMUSE00000682627
 
 my $exon_sql_list = join ',', @exon_array;
 
-my $model = LIMS2::Model->new( { user => 'webapp', audit_user => 'dp10@sanger.ac.uk' } );
+my $model = LIMS2::Model->new( { user => 'webapp', audit_user => $ENV{USER} .'@sanger.ac.uk' } );
 
 my $sql_query = five_query( $exon_sql_list);
 
