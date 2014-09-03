@@ -73,6 +73,7 @@ if ($assembly_param eq '') {
 
 INFO( '-------------------- New Primer Calculation Begins -----------------------');
 my $data_clip;
+$DB::single=1;
 if ( $plate_well_param  eq '') {
     if ( $crispr_type eq 'single' ) {
         $data_clip = primers_for_single_crispr_plate({
@@ -228,7 +229,8 @@ sub primers_for_single_crispr_plate {
         push @well_id_list, $well->id;
     }
 
-    my $design_data_cache = $model->create_design_data_cache(
+    my $design_data_cache = create_design_data_cache(
+            $model,
             \@well_id_list,
         );
 
@@ -260,6 +262,19 @@ sub primers_for_single_crispr_plate {
     $logger->info( 'Done' );
     return $clip;
 }
+
+
+#TODO: modify this method to return a combined list of short and long arm designs
+
+sub create_design_data_cache {
+    my $model = shift;
+    my $well_id_list_ref = shift;
+    # Use a ProcessTree method to get the list of design wells.
+$DB::single=1;
+    my $design_data_hash = $model->get_short_arm_design_data_for_well_id_list( $well_id_list_ref );
+    return $design_data_hash;
+}
+
 
 sub primers_for_plate {
     my $p = shift;
@@ -314,7 +329,8 @@ sub primers_for_plate {
         push @well_id_list, $well->id;
     }
 
-    my $design_data_cache = $model->create_design_data_cache(
+    my $design_data_cache = create_design_data_cache(
+            $model,
             \@well_id_list,
         );
 
@@ -374,7 +390,8 @@ sub create_d_plate_hash{
         }
     }
 
-    $dis_designs = $model->create_design_data_cache(
+    $dis_designs = create_design_data_cache(
+                $model,
                 \@well_id_list,
             );
 
@@ -656,7 +673,7 @@ sub run_primers {
         $logger->info( 'PCR primers not required' );
     }
 
-    if ( uc($genotyping_primers_required) eq 'YES') {
+    if ( uc($genotyping_primers_required) =~ /YES|ONLY/) {
         $logger->info( 'Generating genotyping primers' );
         my $design_oligos;
         ($out_rows, $crispr_clip) = prepare_genotyping_primers({
@@ -797,8 +814,6 @@ sub prepare_genotyping_primers {
     my $assembly_id = $params->{'assembly_id'};
 
 
-#    my %primer_clip;
-
     my $design_row;
     foreach my $well ( @{$wells} ) {
         my $well_id = $well->id;
@@ -810,7 +825,10 @@ sub prepare_genotyping_primers {
         $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
 
         $logger->info( $design_id . "\t(" . $gene_name . ')' );
-        next if $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
+        # If we only want genotyping primers, crispr primers are irrelevant
+        if ($genotyping_primers_required ne 'ONLY') {
+            next if $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
+        }
 
         my ($genotyping_primers, $genotyping_mapped, $chr_strand, $design_oligos, $chr_seq_start)
             = LIMS2::Model::Util::OligoSelection::pick_genotyping_primers( {
@@ -839,12 +857,14 @@ sub prepare_genotyping_primers {
             $primer_clip->{$well_name}->{'design_id'},
             $primer_clip->{$well_name}->{'strand'},
         );
-        if ( $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass' ){
+        unless ( $genotyping_primers_required eq 'ONLY' ) {
+            if ( $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass' ){
 
-            $csv_row = join( ',' , @out_vals);
-            push @out_rows, $csv_row;
+                $csv_row = join( ',' , @out_vals);
+                push @out_rows, $csv_row;
             
-            next;
+                next;
+            }
         }
         # Take the two highest ranking primers
         my ($rank_a, $rank_b) = get_best_two_primer_ranks( $primer_clip->{$well_name}->{$primer_type}->{'left'} );
