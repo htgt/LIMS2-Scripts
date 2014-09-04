@@ -588,7 +588,7 @@ sub run_single_crispr_primers {
         $logger->info( 'PCR primers not required' );
     }
 
-    if ( uc($genotyping_primers_required) eq 'YES' ) {
+    if ( uc($genotyping_primers_required) =~ /YES|ONLY/ ) {
         $logger->info( 'Generating genotyping primers' );
         my $design_oligos;
         ($out_rows, $crispr_clip) = prepare_genotyping_primers({
@@ -835,7 +835,7 @@ sub prepare_genotyping_primers {
             next if $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
         }
 
-        my ($genotyping_primers, $genotyping_mapped, $chr_strand, $design_oligos, $chr_seq_start)
+        my ($genotyping_primers, $genotyping_mapped, $chr_strand, $design_oligos, $chr_seq_start, $chr_name)
             = LIMS2::Model::Util::OligoSelection::pick_genotyping_primers( {
                 schema => $model->schema,
                 design_id => $design_id,
@@ -847,6 +847,7 @@ sub prepare_genotyping_primers {
         $primer_clip->{$well_name}{'gene_name'} = $gene_name;
         $primer_clip->{$well_name}{'design_id'} = $design_id;
         $primer_clip->{$well_name}{'strand'} = $chr_strand;
+	$primer_clip->{$well_name}{'chr_id'} = get_chr_id_for_name( $species, $chr_name );
 
         $primer_clip->{$well_name}{'genotyping_primers'} = $genotyping_mapped;
         $primer_clip->{$well_name}{'design_oligos'} = $design_oligos;
@@ -992,6 +993,10 @@ sub persist_primers {
     my $chr_end = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_end'}
         + $pc->{$well_name}->{'chr_seq_start'} - 1;
     my $chr_id = $pc->{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'chr_id'}; # not the translated name
+    if ( ! $chr_id ) {
+	# Probably because we are only dealing with genotyping primers.
+        $chr_id = $pc->{'well_name'}->{'chr_id'};
+    }
 
     my $crispr_primer_result;
     if ($primer_class eq 'genotyping' ) {
