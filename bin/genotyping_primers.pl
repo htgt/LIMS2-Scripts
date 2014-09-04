@@ -17,7 +17,7 @@ use LIMS2::Model::Util::OligoSelection qw(
 );
 
 my $plate_name_param = '';
-my $plate_well_param = '';
+my @plate_well_param; # plate_well_param is now an array of wells
 my $species_param = 'Human';
 my $assembly_param = '';
 my $crispr_type = 'pair';
@@ -35,7 +35,7 @@ my $update_data_param = 'NO'; # Don't update existing database data by default
 
 GetOptions(
     'plate=s'       => \$plate_name_param,
-    'well=s'        => \$plate_well_param,
+    'well=s'        => \@plate_well_param,
     'repeat_mask=s' => \@repeat_mask_param,
     'species=s'     => \$species_param,
     'crispr_type=s' => \$crispr_type,
@@ -74,7 +74,7 @@ if ($assembly_param eq '') {
 INFO( '-------------------- New Primer Calculation Begins -----------------------');
 my $data_clip;
 $DB::single=1;
-if ( $plate_well_param  eq '') {
+if ( ! @plate_well_param ) {
     if ( $crispr_type eq 'single' ) {
         $data_clip = primers_for_single_crispr_plate({
             'model' => $lims2_model,
@@ -108,7 +108,7 @@ else
             'd_plate_list' => \@d_plate_param,
             'species' => $species_param,
             'assembly' => $assembly_param,
-            'plate_well' => $plate_well_param,
+            'plate_well_list' => \@plate_well_param,
         });
     }
     else {
@@ -120,7 +120,7 @@ else
             'repeat_mask_list' => \@repeat_mask_param,
             'species' => $species_param,
             'assembly' => $assembly_param,
-            'plate_well' => $plate_well_param,
+            'plate_well_list' => \@plate_well_param,
             'crispr_pair_id' => $crispr_pair_id_param,
         });
     }
@@ -142,7 +142,7 @@ Usage: perl genotyping_primers.pl
     --plate=plate_name
     [--crispr_right=crispr_right_plate_name]
     [--crispr_left=crispr_left_plate_name]
-    [--well=well_name]
+    [--well=well_name [--well=well_name2] ...] Use multiple well params to specify a list of wells
     [--crispr_type=(single | pair)]
     [--species=(Human | Mouse)]
     [--assembly=assembly_name (e.g., GRCm38), default is the LIMS2 default assembly
@@ -284,7 +284,7 @@ sub primers_for_plate {
     my $repeat_mask = $p->{'repeat_mask_list'};
     my $species_input = $p->{'species'};
     my $assembly_input = $p->{'assembly'};
-    my $plate_well_input = $p->{'plate_well'};
+    my $plate_well_input = $p->{'plate_well_list'};
     my $crispr_pair_id = $p->{'crispr_pair_id'};
     my $plate_crispr_right = $p->{'plate_crispr_right'};
     my $plate_crispr_left = $p->{'plate_crispr_left'};
@@ -318,11 +318,16 @@ sub primers_for_plate {
     my $well_count = @wells;
     $logger->info( 'Processing crispr primers for ' . $well_count . ' wells:');
     my @well_id_list;
+$DB::single=1;    
+    my @wells_selected;
 
     # Select just the well we want
     if ( $plate_well_input ) {
-        $logger->info("Selecting well: [$plate_well_input]");
-        @wells = grep { $_->name =~ /$plate_well_input/  } @wells;
+        foreach my $well_select_name ( @{$plate_well_input} ) {
+            $logger->info("Selecting well: [$well_select_name]");
+            push @wells_selected, grep { $_->name =~ /$well_select_name/  } @wells;
+        }
+        @wells = @wells_selected;
     }
 
     foreach my $well ( @wells ) {
@@ -621,7 +626,7 @@ sub run_primers {
     my $crispr_pair_id_inp = $params->{'crispr_pair_id'};
     my $assembly_id = $params->{'assembly_id'};
 
-    my $formatted_well = $params->{'plate_well'} ? ('_' . $params->{'plate_well'}) : '';
+    my $formatted_well = $params->{'plate_well'} ? ('_' . join('_', @{$params->{'plate_well'}})) : '';
 
     my $lines;
     $logger->debug( 'Generating gene symbol cache' );
