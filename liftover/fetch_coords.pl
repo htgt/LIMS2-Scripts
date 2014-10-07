@@ -5,10 +5,15 @@ use warnings;
 use LIMS2::Model;
 use IO::File;
 use feature qw( say );
+use Getopt::Long;
 
 my $model = LIMS2::Model->new( user => 'tasks' );
 
-my $species = $ARGV[0];
+my ( $species, $assembly );
+GetOptions(
+    'species=s'   => \$species,
+    'assembly=s'  => \$assembly,
+);
 
 my @DATA = (
     {
@@ -37,7 +42,7 @@ for my $datum ( @DATA ) {
     my @loci = $model->schema->resultset( $datum->{resultset} )->search(
         {
             $datum->{base} . '.species_id' => $species,
-            assembly_id         => 'GRCh37',
+            assembly_id         => $assembly,
         },
         {
             join     => $datum->{join}, 
