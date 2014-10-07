@@ -15,6 +15,9 @@ GetOptions(
     'assembly=s'  => \$assembly,
 );
 
+die ( 'Must specify --species' ) unless $species;
+die ( 'Must specify --assembly' ) unless $assembly;
+
 my @DATA = (
     {
         resultset => 'DesignOligoLocus',
