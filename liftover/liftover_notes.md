@@ -1,8 +1,9 @@
 # UCSC Liftover Tool
 Work out new assembly coordinates given the old assembly coordinates.
-Download from: `http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64.v287/`
-Grab chain file for our conversion from:`http://hgdownload.cse.ucsc.edu/goldenPath/hg19/liftOver/`
-- hg19ToHg38.over.chain.gz
+Download from: http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64.v287/
+
+Grab chain file for our conversion from: http://hgdownload.cse.ucsc.edu/goldenPath/hg19/liftOver/
+ hg19ToHg38.over.chain.gz
 
 ## Liftover Tool Steps
 - Grab current coordinates for species we are lifting over
