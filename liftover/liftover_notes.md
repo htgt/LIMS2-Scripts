@@ -1,3 +1,18 @@
+# Steps
+- Run following script to download current coordinates into bed files:
+    - specify species and current assembly
+    - `fetch_coords.pl --species Human --assembly GRCh37`
+- Multiple bed files will be created with coordinates from:
+    - `design_oligo_loci`
+    - `genotyping_primer_loci`
+    - `crispr_loci`
+    - `crispr_primer_loci`
+- Run liftover on the 4 bed files ( See section below ).
+- Run the `add_new_loci.pl` script for each of the 4 tables
+    - must specify species, new assembly, data-file and table resultset name.
+    - run initially without commit flag, if everything goes smoothly run script with commit flag.
+    - `add_new_loci.pl --species Human --assembly GRCh38 --resultset DesignOligoLocus --data-file DesignOligoLocus.new.bed --commit`
+
 # UCSC Liftover Tool
 Work out new assembly coordinates given the old assembly coordinates.
 Download from: http://hgdownload.cse.ucsc.edu/admin/exe/linux.x86_64.v287/
