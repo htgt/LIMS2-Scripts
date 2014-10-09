@@ -271,7 +271,8 @@ sub create_design_data_cache {
     my $well_id_list_ref = shift;
     # Use a ProcessTree method to get the list of design wells.
 $DB::single=1;
-    my $design_data_hash = $model->get_short_arm_design_data_for_well_id_list( $well_id_list_ref );
+#    my $design_data_hash = $model->get_short_arm_design_data_for_well_id_list( $well_id_list_ref );
+    my $design_data_hash = $model->get_design_data_for_well_id_list( $well_id_list_ref );
     return $design_data_hash;
 }
 
@@ -725,8 +726,7 @@ sub prepare_pcr_primers {
         next if $crispr_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
 
         my ($crispr_pcr_primers, $crispr_pcr_mapped, $chr_seq_start)
-            = LIMS2::Model::Util::OligoSelection::pick_crispr_PCR_primers( {
-                schema => $model->schema,
+            = LIMS2::Model::Util::OligoSelection::pick_crispr_PCR_primers( $model, {
                 well_id => $well,
                 crispr_primers => $crispr_clip->{$well_name},
                 species => $species,
@@ -834,10 +834,9 @@ sub prepare_genotyping_primers {
         if ($genotyping_primers_required ne 'ONLY') {
             next if $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
         }
-
+$DB::single=1;
         my ($genotyping_primers, $genotyping_mapped, $chr_strand, $design_oligos, $chr_seq_start, $chr_name)
-            = LIMS2::Model::Util::OligoSelection::pick_genotyping_primers( {
-                schema => $model->schema,
+            = LIMS2::Model::Util::OligoSelection::pick_genotyping_primers( $model, {
                 design_id => $design_id,
                 well_id => $well,
                 species => $species,
@@ -847,7 +846,8 @@ sub prepare_genotyping_primers {
         $primer_clip->{$well_name}{'gene_name'} = $gene_name;
         $primer_clip->{$well_name}{'design_id'} = $design_id;
         $primer_clip->{$well_name}{'strand'} = $chr_strand;
-	$primer_clip->{$well_name}{'chr_id'} = get_chr_id_for_name( $species, $chr_name );
+$DB::single=1;
+        $primer_clip->{$well_name}{'chr_id'} = $model->get_chr_id_for_name( $species, $chr_name );
 
         $primer_clip->{$well_name}{'genotyping_primers'} = $genotyping_mapped;
         $primer_clip->{$well_name}{'design_oligos'} = $design_oligos;
@@ -995,7 +995,7 @@ sub persist_primers {
     my $chr_id = $pc->{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'chr_id'}; # not the translated name
     if ( ! $chr_id ) {
 	# Probably because we are only dealing with genotyping primers.
-        $chr_id = $pc->{'well_name'}->{'chr_id'};
+        $chr_id = $pc->{$well_name}->{'chr_id'};
     }
 
     my $crispr_primer_result;
@@ -1184,8 +1184,8 @@ sub prepare_single_crispr_primers {
         }
 
 
-        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_single_crispr_primers( {
-                schema => $model->schema,
+        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_single_crispr_primers(
+                $model, {
                 design_id => $design_id,
                 crispr_id => $crispr_id,
                 species => $species,
@@ -1279,12 +1279,13 @@ sub prepare_crispr_primers {
             # TODO: Add code to alter persistence behaviour
         }
 
-        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_crispr_primers( {
-                'schema' => $model->schema,
-                'design_id' => $design_id,
-                'crispr_pair_id' => $crispr_pair_id,
-                'species' => $species,
-                'repeat_mask' => $repeat_mask,
+        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_crispr_primers(
+                $model,
+                {
+                    'design_id' => $design_id,
+                    'crispr_pair_id' => $crispr_pair_id,
+                    'species' => $species,
+                    'repeat_mask' => $repeat_mask,
             });
         $primer_clip{$well_name}{'pair_id'} = $crispr_pair_id;
         $primer_clip{$well_name}{'gene_name'} = $gene_name;
