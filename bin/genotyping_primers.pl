@@ -573,6 +573,7 @@ sub run_single_crispr_primers {
 
     if ( uc($pcr_primers_required) eq 'YES' ) {
         $logger->info( 'Generating PCR primers for crispr region' );
+        dump_params( $ENV{LIMS2_PRIMER3_PCR_CRISPR_PRIMER_CONFIG} );
         ($out_rows, $crispr_clip) = prepare_pcr_primers({
                 'model' => $model,
                 'crispr_clip' => $crispr_clip,
@@ -639,7 +640,7 @@ sub run_primers {
             'species' => $species,
             'model' => $model,
         });
-    my ($out_rows, $crispr_clip ); 
+    my ($out_rows, $crispr_clip );
     if ( uc($crispr_primers_required) eq 'YES') {
         $logger->debug( 'Preparing crispr primers');
         ($out_rows, $crispr_clip ) = prepare_crispr_primers({
@@ -663,6 +664,7 @@ sub run_primers {
 
     if ( uc($pcr_primers_required) eq 'YES') {
         $logger->info( 'Generating PCR primers for crispr region' );
+        dump_params( $ENV{LIMS2_PRIMER3_PCR_CRISPR_PRIMER_CONFIG} );
         ($out_rows, $crispr_clip) = prepare_pcr_primers({
                 'model' => $model,
                 'crispr_clip' => $crispr_clip,
@@ -704,6 +706,20 @@ sub run_primers {
     return $crispr_clip;
 }
 
+sub dump_params {
+    my $param_file_name = shift;
+
+    $logger->info( 'Dumping parameter file for: ' . $param_file_name );
+
+    open( my $fh, "<", $param_file_name )
+        or die "Unable to open parameter file: $param_file_name: $!";
+    while( <$fh> ) {
+        print $_;
+    }
+    close $fh;
+    $logger->info( 'End of file: ' . $param_file_name );
+    return;
+}
 
 sub prepare_pcr_primers {
     my $params = shift;
@@ -751,7 +767,7 @@ sub prepare_pcr_primers {
 
             $csv_row = join( ',' , @out_vals);
             push @out_rows, $csv_row;
-            
+
             next;
         }
         # Take the two highest ranking primers
@@ -867,7 +883,7 @@ sub prepare_genotyping_primers {
 
                 $csv_row = join( ',' , @out_vals);
                 push @out_rows, $csv_row;
-            
+
                 next;
             }
         }
@@ -1090,6 +1106,7 @@ sub persist_primers {
                         die;
                     }
                 }
+                $crispr_check_r = $model->schema->resultset('CrisprPrimer')->find( $search_params );
                 if ( ! $crispr_check_r ) {
                     $crispr_primer_result = $model->schema->resultset('CrisprPrimer')->create( $create_params );
                     if ( ! $crispr_primer_result ) {
@@ -1318,7 +1335,7 @@ sub prepare_crispr_primers {
 
             $csv_row = join( ',' , @out_vals);
             push @out_rows, $csv_row;
-            
+
             next;
         }
 
@@ -1338,7 +1355,7 @@ sub prepare_crispr_primers {
             $primer_clip{$well_name}->{'crispr_seq'}->{'right_crispr'}->{'id'},
             $primer_clip{$well_name}->{'crispr_seq'}->{'right_crispr'}->{'seq'},
         );
-        my $csv_row = join( ',' , @out_vals);
+        $csv_row = join( ',' , @out_vals);
         push @out_rows, $csv_row;
     }
 
@@ -1374,7 +1391,7 @@ sub check_primers_for_crispr_id {
     my $crispr_id = shift;
 
     my $crispr_primers_rs = $model->schema->resultset('CrisprPrimer')->search({
-        'crispr_pair_id' => $crispr_id,
+        'crispr_id' => $crispr_id,
     });
 
     return $crispr_primers_rs;
