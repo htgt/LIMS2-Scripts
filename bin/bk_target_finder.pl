@@ -10,12 +10,10 @@ use Log::Log4perl ':easy';
 use List::MoreUtils qw( all minmax any );
 use IO::File;
 use Pod::Usage;
-use DDP colored => 1;
+use DDP colored => 0;
 use Const::Fast;
 use YAML::Any qw( LoadFile );
 use Math::Round qw( round );
-
-use Smart::Comments;
 
 =head2
 
@@ -93,6 +91,7 @@ marker_symbol
 ensembl_id
 ensembl_id_b
 fail_reason
+critical_exons
 );
 
 my $ensembl_util = WebAppCommon::Util::EnsEMBL->new( species => $species );
@@ -172,8 +171,9 @@ sub process_target {
     my $transcript = $gene->canonical_transcript;
     my $insertion_sites = get_intron_cassette_insertion_sites( \@exons, $transcript );
     unless ( %{ $insertion_sites } ) {
-        ERROR('Unable to find any valid critical exons');
+        ERROR('Unable to find any insertion sites in critical exons');
         $data->{fail_reason} = 'No insertion sites found';
+        $data->{critical_exons} = join( '|', map{ $_->stable_id } @exons );
         push @failed_targets, $data;
         return;
     }
@@ -292,8 +292,6 @@ Return list of exons sorted on ascending length
 sub get_all_critical_exons {
     my ( $gene, $data ) = @_;
 
-    return get_predefined_exons( $data->{exon_ids}, $gene, $data ) if $data->{exon_ids};
-
     my %valid_exons;
     my %transcript_exons;
     my @coding_transcript_names;
@@ -337,34 +335,7 @@ sub get_all_critical_exons {
     my $num_critical_exons = @valid_critical_exons;
     INFO( "Has $num_critical_exons critical exons" );
 
-    my @ordered_critical_exons = sort most_five_prime @valid_critical_exons;
-
-    return \@ordered_critical_exons;
-}
-
-=head2 get_predefined_exons
-
-If exons targets have been pre-defined in the input use these
-instead of trying to calculate the target exons.
-
-=cut
-sub get_predefined_exons {
-    my ( $exon_ids, $gene, $data ) = @_;
-    my @exons;
-    my @exon_ids = split /,/, $data->{exon_ids};
-
-    my %gene_exons = map{ $_->stable_id => 1 } @{ $gene->get_all_Exons };
-    for my $exon_id ( @exon_ids ) {
-        unless ( exists $gene_exons{$exon_id} ) {
-            ERROR("The exon $exon_id can not be found on the gene: " . $gene->stable_id);
-            next;
-        }
-        my $exon = $ensembl_util->exon_adaptor->fetch_by_stable_id( $exon_id );
-        LOGDIE("Can not find specified exon $exon_id") unless $exon;
-        push @exons, $exon;
-    }
-
-    return \@exons;
+    return \@valid_critical_exons;
 }
 
 =head2 find_valid_exons
@@ -478,31 +449,18 @@ sub valid_coding_transcript {
     return 1;
 }
 
-=head2 most_five_prime
-
-Rank critical exons by following criteria by closest to 5 prime
-
-=cut
-## no critic(RequireFinalReturn)
-sub most_five_prime {
-    if ( $a->strand == 1 ) {
-        $a->start <=> $b->start;
-    }
-    else {
-        $b->start <=> $a->start;
-    }
-}
-## use critic
-
 =head2 get_intron_cassette_insertion_sites
 
-4/ Within target exons grab search sequence
-    a/ Leave 100bp of coding sequence either side
-    b/ Cut off after reaching over 50% of coding region
-- search seq: 100bp of exon seq to either side
-    - AAGG / AAGA / CAGG / CAGA
+We have a array of critical exons that we can search through now.
 
-        #my ( $start, $end ) = $transcript->cdna2genomic($cdna_mid, $cdna_mid);
+Search for the intron cassette insertion sites within each exon:
+    a/ Leave 100bp of coding sequence either side of insertion site
+    b/ Insertion site must be within first 50% of coding bases
+    c/ Insertion sites: AAGG / AAGA / CAGG / CAGA
+
+Once sites found make sure there are not any SapI binding sites with 1000 bases
+to either side.
+
 =cut
 sub get_intron_cassette_insertion_sites {
     my ( $exons, $transcript ) = @_;
@@ -518,19 +476,11 @@ sub get_intron_cassette_insertion_sites {
     for my $exon ( @{ $exons } ) {
         INFO( 'Searching for insertion sites in : ' . $exon->stable_id );
 
-        if ( $exon->cdna_coding_start( $transcript ) > $cdna_mid ) {
-            DEBUG( 'Exon ' . $exon->stable_id . " is starts more than 50% into coding bases" );
-            next;
-        }
-
-        # must leave 100bp of coding sequence to either side of insertion site
+        # must leave at least 100bp of coding sequence to either side of insertion site
         my $start = $exon->coding_region_start( $transcript ) + 100;
         my $end   = $exon->coding_region_end( $transcript ) - 100;
-        # the two checks below should never occur as we have already filtered out
-        # non-coding exons and small exons
-        die ( 'Non coding exon' ) if !$start || !$end;
-        die ( "Start $start greater than end $end" ) if $start > $end;
 
+        # insertion site must be within first 50% of coding sequences
         if( $strand == 1 && $end > $middle ) {
             $end = $middle;
         }
@@ -539,7 +489,7 @@ sub get_intron_cassette_insertion_sites {
         }
 
         # check we have enough sequence left to search for a insertion site
-        if  ( ( $end - $start ) < 4 ) {
+        if ( ( $end - $start ) < 4 ) {
             DEBUG( 'Coding region in exon not big enough for insertion site' );
             next;
         }
@@ -555,6 +505,7 @@ sub get_intron_cassette_insertion_sites {
         my $seq = $slice->seq;
         my $length = length( $seq );
 
+        # search for intron cassette insertion sites in sequence
         my %sites;
         while ( $seq =~ /([AC]AG[GA])/g ) {
             my $ins_site = $1;
@@ -567,26 +518,27 @@ sub get_intron_cassette_insertion_sites {
                 $start_pos = $start + ( $length - $end_pos );
             }
             $sites{$start_pos} = $ins_site;
-
-
         }
 
+        # If we have insertion sites filter out ones that have SapI sites within 1000 bases
+        # either side
         if ( %sites ) {
             $valid_sites{$exon->stable_id}{length} = $exon->length;
             my ( $search_start, $search_end ) = minmax keys %sites;
             $search_start -= 1000;
-            $search_end += 1000;
+            $search_end   += 1000;
             my $slice = $ensembl_util->slice_adaptor->fetch_by_region(
                 "chromosome",
                 $transcript->seq_region_name,
                 $search_start,
                 $search_end,
             );
+            # get array of SapI binding site coordinates
             my @sapI_sites = @{ map_SapI_binding_sites( $slice->seq, $search_start ) };
 
             for my $ins_site_start ( keys %sites ) {
                 my $search_start = $ins_site_start - 1000;
-                my $search_end = $ins_site_start + 1004;
+                my $search_end   = $ins_site_start + 1004; # the cassette insertion site is 4 bases, hense 1004
                 if ( any { $_ > $search_start && $_ < $search_end } @sapI_sites ) {
                     next;
                 }
@@ -605,6 +557,7 @@ sub get_intron_cassette_insertion_sites {
         else {
             my $num_sites = keys %sites;
             INFO( ".. none found, have $num_sites insertion sites they all have flanking SapI sites" );
+            delete $valid_sites{ $exon->stable_id };
         }
 
     }
@@ -618,6 +571,8 @@ Check for SapI binding sites within sequence
 GCTCTTC
 GAAGAGC
 
+Return array of coordinates for the binding sites, if any
+
 =cut
 sub map_SapI_binding_sites {
     my ( $seq, $genomic_start ) = @_;
@@ -627,24 +582,10 @@ sub map_SapI_binding_sites {
         my $bind_site = $1;
         my $end_pos = pos $seq;
         my $mid_pos = $genomic_start + ( $end_pos - 4 );
-        #$binding_sites{$mid_pos} = $bind_site;
         push @binding_sites, $mid_pos;
     }
-    #return \%binding_sites;
+
     return \@binding_sites;
-
-    #my $c = () = $seq =~ /GCTCTTC|GAAGAGC/g;
-    #return $c;
-
-    #if ( index($seq, 'GCTCTTC') != -1 ) {
-        #return 1;
-    #}
-
-    #if ( index($seq, 'GAAGAGC') != -1 ) {
-        #return 1;
-    #}
-
-    return;
 }
 
 sub _get_transcript_attribute {
