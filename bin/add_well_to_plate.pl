@@ -14,7 +14,7 @@ BEGIN { Log::Log4perl->easy_init( { level => $DEBUG, layout => '%p %m%n' } ) }
 my %PROCESS_TYPE_DATA = (
     'int_recom'              => [qw( process_cassette process_backbone )],
     'cre_bac_recom'          => [qw( process_cassette process_backbone )],
-    '2w_gateway'             => [qw( process_cassette process_backbone process_recombinases )],
+    '2w_gateway'             => [qw( process_cassette process_recombinases )],
     '3w_gateway'             => [qw( process_cassette process_backbone process_recombinases )],
     'recombinase'            => [qw( process_recombinases )],
     'clone_pick'             => [qw( process_recombinases )],
@@ -35,84 +35,113 @@ my %FIELD_NAMES = (
 my $model = LIMS2::Model->new( user => 'webapp', audit_user => $ENV{USER}.'@sanger.ac.uk' );
 
 {
-    my ( $target_well, $template_well ) = ( "A06", "A02" );
+    my ( $target_well, $template_well ) = ( "C03", "A01" );
     my $user = "ah19\@sanger.ac.uk";
 
-    # add_crispr_well( $user, "HCL0B", $target_well, 76878 );
-    # add_crispr_well( $user, "HCR0B", $target_well, 76899 );
+    # add_design_well( $user, "HG0", $target_well, 1015707 );
 
     # my @data = (
-    #     #design
-    #     {
-    #         parent_plate  => "HG0",
-    #         parent_well   => $target_well,
-    #         target_plate  => "HINT0",
-    #         target_well   => $target_well,
-    #         template_well => $template_well,
-    #     },
-    #     {
-    #         parent_plate  => "HINT0",
-    #         parent_well   => $target_well,
-    #         target_plate  => "HF0_Z",
-    #         target_well   => $target_well,
-    #         template_well => $template_well,
-    #     },
-    #     {
-    #         parent_plate  => "HF0_Z",
-    #         parent_well   => $target_well,
-    #         target_plate  => "HFP0_Z",
-    #         target_well   => $target_well,
-    #         template_well => $template_well,
-    #     },
-    #     {
-    #         parent_plate  => "HFP0_Z",
-    #         parent_well   => $target_well,
-    #         target_plate  => "HFPQ0_Z",
-    #         target_well   => $target_well,
-    #         template_well => $template_well,
-    #     },
-    #     #left_crispr
-    #     {
-    #         parent_plate  => "HCL0B",
-    #         parent_well   => $target_well,
-    #         target_plate  => "HCLS0B",
-    #         target_well   => $target_well,
-    #         template_well => $template_well,
-    #     },
-    #     {
-    #         parent_plate  => "HCLS0B",
-    #         parent_well   => $target_well,
-    #         target_plate  => "HCLSQ0B",
-    #         target_well   => $target_well,
-    #         template_well => $template_well,
-    #     },
-    #     #right_crispr
-    #     {
-    #         parent_plate  => "HCR0B",
-    #         parent_well   => $target_well,
-    #         target_plate  => "HCRS0B",
-    #         target_well   => $target_well,
-    #         template_well => $template_well,
-    #     },
-    #     {
-    #         parent_plate  => "HCRS0B",
-    #         parent_well   => $target_well,
-    #         target_plate  => "HCRSQ0B",
-    #         target_well   => $target_well,
-    #         template_well => $template_well,
-    #     },
-    #     #EP
-    #     {
-    #         parent_plate => "HFA0B",
-    #         parent_well  => $target_well,
-    #         target_plate => "HUEP0001B",
-    #         target_well  => $target_well,
-    #         template_well => $template_well,
-    #     }
+    #     { target_well => "A10", design_id => 1015685 },
+    #     { target_well => "A11", design_id => 1015687 },
+    #     { target_well => "A12", design_id => 1015688 },
+    #     { target_well => "B02", design_id => 1015689 },
+    #     { target_well => "B03", design_id => 1015686 },
     # );
 
+    # for my $d ( @data ) {
+    #     add_design_well( $user, "HG0", $d->{target_well}, $d->{design_id} );
+    # }
+
+    # add_crispr_well( $user, "HCL0", $target_well, 225014 );
+    # add_crispr_well( $user, "HCR0", $target_well, 225015 );
+
+    #my @data = (
+        #{ target_well => "A10", left_crispr_id => 225014, right_crispr_id => 225015 },
+        #{ target_well => "A11", left_crispr_id => 225016, right_crispr_id => 225017 },
+        #{ target_well => "A12", left_crispr_id => 225018, right_crispr_id => 225019 },
+        #{ target_well => "B01", left_crispr_id => 225020, right_crispr_id => 225021 },
+        #{ target_well => "B02", left_crispr_id => 193059, right_crispr_id => 225022 },
+        #{ target_well => "B03", left_crispr_id => 225023, right_crispr_id => 225024 }
+    #);
+
+    #for my $d ( @data ) {
+    #    add_crispr_well( $user, "HCL0", $d->{target_well}, $d->{left_crispr_id} );
+    #    add_crispr_well( $user, "HCR0", $d->{target_well}, $d->{right_crispr_id} );
+    #}
+
+    my @data = (
+        # #design
+        # {
+        #     parent_plate  => "HG0",
+        #     parent_well   => $target_well,
+        #     target_plate  => "HINT0",
+        #     target_well   => $target_well,
+        #     template_well => $template_well,
+        # },
+        # {
+        #     parent_plate  => "HINT0",
+        #     parent_well   => $target_well,
+        #     target_plate  => "HF0_Z",
+        #     target_well   => $target_well,
+        #     template_well => $template_well,
+        # },
+        # {
+        #     parent_plate  => "HF0_Z",
+        #     parent_well   => $target_well,
+        #     target_plate  => "HFP0_Z",
+        #     target_well   => $target_well,
+        #     template_well => $template_well,
+        # },
+        # {
+        #     parent_plate  => "HFP0_Z",
+        #     parent_well   => $target_well,
+        #     target_plate  => "HFPQ0_Z",
+        #     target_well   => $target_well,
+        #     template_well => $template_well,
+        # },
+        #left_crispr
+        # {
+        #     parent_plate  => "HCL0",
+        #     parent_well   => $target_well,
+        #     target_plate  => "HCLS0",
+        #     target_well   => $target_well,
+        #     template_well => $template_well,
+        # },
+        # {
+        #     parent_plate  => "HCLS0",
+        #     parent_well   => $target_well,
+        #     target_plate  => "HCLSQ0",
+        #     target_well   => $target_well,
+        #     template_well => $template_well,
+        # },
+        # #right_crispr
+        # {
+        #     parent_plate  => "HCR0",
+        #     parent_well   => $target_well,
+        #     target_plate  => "HCRS0",
+        #     target_well   => $target_well,
+        #     template_well => $template_well,
+        # },
+        # {
+        #     parent_plate  => "HCRS0",
+        #     parent_well   => $target_well,
+        #     target_plate  => "HCRSQ0",
+        #     target_well   => $target_well,
+        #     template_well => $template_well,
+        # },
+        #EP
+        {
+            #parent_plate => "HFA0",
+            parent_plate => "TP53_MK2",
+            parent_well  => "A01",
+            target_plate => "HUEP0",
+            target_well  => $target_well,
+            template_well => $template_well,
+        }
+    );
+
     for my $well ( @data ) {
-        my $well = add_well_to_plate( 
+        my $well = add_well_to_plate(
             $well->{parent_plate},
             $well->{parent_well},
             $well->{target_plate},
@@ -120,21 +149,19 @@ my $model = LIMS2::Model->new( user => 'webapp', audit_user => $ENV{USER}.'@sang
             $well->{template_well},
             $user,
         );
-
-
     }
 
     #BRCA1 is in A08 on HFPQ0_Z
 
-    # add_assembly_well( 
-    #     'ah19@sanger.ac.uk', 
-    #     "HFA0B", 
-    #     $target_well, 
-    #     [ 
-    #         { plate_name => "HCLSQ0B", well_name => $target_well }, 
-    #         { plate_name => "HCRSQ0B", well_name => $target_well }, 
-    #         { plate_name => "HFPQ0_Z", well_name => "A07"} #design
-    #     ] 
+    # add_assembly_well(
+    #     'ah19@sanger.ac.uk',
+    #     "HFA0",
+    #     $target_well,
+    #     [
+    #         { plate_name => "HCLSQ0", well_name => $target_well },
+    #         { plate_name => "HCRSQ0", well_name => $target_well },
+    #         { plate_name => "HFPQ0_Z", well_name => $target_well } #design
+    #     ]
     # );
 }
 
@@ -146,16 +173,16 @@ sub add_well_to_plate {
         well_name  => $template_well,
     } );
 
-    DEBUG "Template well id is " . $db_template_well; 
+    DEBUG "Template well id is " . $db_template_well;
 
     my $process = ($db_template_well->parent_processes)[0];
 
-    DEBUG "Template process id is " . $process->id; 
+    DEBUG "Template process id is " . $process->id;
 
     my %process_data = (
         type         => $process->type_id,
         input_wells  => [ { plate_name => $parent_plate, well_name => $parent_well } ],
-        output_wells => [ { plate_name => $target_plate, well_name => $target_well } ] 
+        output_wells => [ { plate_name => $target_plate, well_name => $target_well } ]
     );
 
     for my $field ( @{ $PROCESS_TYPE_DATA{$process->type_id} } ) {
@@ -208,15 +235,35 @@ sub add_crispr_well {
     return $model->txn_do(
         sub {
             return $model->create_well( {
-                plate_name   => $plate_name, 
-                well_name    => $well_name, 
+                plate_name   => $plate_name,
+                well_name    => $well_name,
                 created_by   => $user,
                 process_data => {
-                    type         => "create_crispr", 
-                    input_wells  => [], 
-                    output_wells => [ { plate_name => $plate_name, well_name => $well_name} ], 
+                    type         => "create_crispr",
+                    input_wells  => [],
+                    output_wells => [ { plate_name => $plate_name, well_name => $well_name} ],
                     crispr_id    => $crispr_id,
-                }, 
+                },
+            } );
+        }
+    );
+}
+
+sub add_design_well {
+    my ( $user, $plate_name, $well_name, $design_id ) = @_;
+
+    return $model->txn_do(
+        sub {
+            return $model->create_well( {
+                plate_name   => $plate_name,
+                well_name    => $well_name,
+                created_by   => $user,
+                process_data => {
+                    type         => "create_di",
+                    input_wells  => [],
+                    output_wells => [ { plate_name => $plate_name, well_name => $well_name} ],
+                    design_id    => $design_id,
+                },
             } );
         }
     );
@@ -228,14 +275,15 @@ sub add_assembly_well {
     return $model->txn_do(
         sub {
             return $model->create_well( {
-                plate_name   => $plate_name, 
-                well_name    => $well_name, 
+                plate_name   => $plate_name,
+                well_name    => $well_name,
                 created_by   => $user,
                 process_data => {
-                    type         => "paired_crispr_assembly", 
-                    input_wells  => $parent_plate_names, 
+                    type         => "paired_crispr_assembly",
+                    #type         => 'single_crispr_assembly',
+                    input_wells  => $parent_plate_names,
                     output_wells => [ { plate_name => $plate_name, well_name => $well_name } ]
-                }, 
+                },
             } );
         }
     );
