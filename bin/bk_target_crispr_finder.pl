@@ -15,14 +15,15 @@ use Try::Tiny;
 
 my $log_level = $WARN;
 GetOptions(
-    'help'                 => sub { pod2usage( -verbose => 1 ) },
-    'man'                  => sub { pod2usage( -verbose => 2 ) },
-    'debug'                => sub { $log_level = $DEBUG },
-    'verbose'              => sub { $log_level = $INFO },
-    'trace'                => sub { $log_level = $TRACE },
-    'target-file=s'        => \my $targets_file,
-    'gene=s'               => \my $single_gene,
-    'species=s'            => \my $species,
+    'help'          => sub { pod2usage( -verbose => 1 ) },
+    'man'           => sub { pod2usage( -verbose => 2 ) },
+    'debug'         => sub { $log_level = $DEBUG },
+    'verbose'       => sub { $log_level = $INFO },
+    'trace'         => sub { $log_level = $TRACE },
+    'target-file=s' => \my $targets_file,
+    'gene=s'        => \my $single_gene,
+    'species=s'     => \my $species,
+    'flanking=i'    => \my $flanking,
 ) or pod2usage(2);
 
 Log::Log4perl->easy_init( { level => $log_level, layout => '%p %x %m%n' } );
@@ -106,13 +107,29 @@ desc
 sub find_target_crisprs {
     my ( $data ) = @_;
 
-    my @crisprs = crisprs_overlapping_region( {
-        chr_name  => $data->{chr_name},
-        chr_start => $data->{ins_start},
-        chr_end   => $data->{ins_end},
-        strand    => $data->{chr_strand},
-        seq       => $data->{ins_seq},
-    } );
+    my @crisprs;
+    if ( $flanking ) {
+        @crisprs = crisprs_flanking_region(
+            {
+                chr_name  => $data->{chr_name},
+                chr_start => $data->{ins_start},
+                chr_end   => $data->{ins_end},
+                strand    => $data->{chr_strand},
+                seq       => $data->{ins_seq},
+            } 
+        );
+    }
+    else {
+        @crisprs = crisprs_overlapping_region(
+            {
+                chr_name  => $data->{chr_name},
+                chr_start => $data->{ins_start},
+                chr_end   => $data->{ins_end},
+                strand    => $data->{chr_strand},
+                seq       => $data->{ins_seq},
+            } 
+        );
+    }
 
     unless ( @crisprs ) {
         $data->{fail_reason} = 'No crisprs found overlapping insertion site';
@@ -129,6 +146,8 @@ sub find_target_crisprs {
         WARN( ".. found $num_crisprs crisprs but non valid" );
         return;
     }
+    my $num_valid_crisprs = @valid_crisprs;
+    DEBUG( ".. found $num_valid_crisprs valid crisprs" );
 
     print_target( $data, \@valid_crisprs );
 }
@@ -137,7 +156,6 @@ sub find_target_crisprs {
 
 Diagram This...
 Numbers allow insertion site to cut crispr site from between 2nd / 3rd bases and the 14th / 15th ones.
-
 
 =cut
 sub crisprs_overlapping_region {
@@ -184,6 +202,28 @@ sub crisprs_overlapping_region {
     );
 
     return ( @pam_right_crisprs, @pam_left_crisprs );
+}
+
+=head2 crisprs_flanking_region
+
+
+=cut
+sub crisprs_flanking_region {
+    my ( $params ) = @_;
+
+    DEBUG("Getting crisprs flanking $flanking bases " . region_str( $params ) );
+
+    my @crisprs = $wge->resultset('Crispr')->search(
+        {
+            'species_id'  => $SPECIES_ID,
+            'chr_name'    => $params->{chr_name},
+            'chr_start'   => {
+                -between => [ $params->{chr_start} - $flanking, $params->{chr_end} + $flanking ],
+            },
+        },
+    );
+
+    return @crisprs;
 }
 
 sub region_str {

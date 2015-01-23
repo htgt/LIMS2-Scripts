@@ -23,7 +23,7 @@ use Math::Round qw( round );
     a/ First 50% of coding region
     b/ exon must be larger than 200 bp ( no exon fragments of less that 100bp can be created )
 4/ Within target exons grab search sequence
-    a/ Leave 100bp of coding sequence either side
+    a/ Leave 80 / 100bp of coding sequence either side
     b/ Cut off after reaching over 50% of coding region
 5/ Within this sequence search for insertion sites for intron cassette
     - AAGG / AAGA / CAGG / CAGA
@@ -53,6 +53,7 @@ GetOptions(
     'genes-file=s'         => \my $genes_file,
     'gene=s'               => \my $single_gene,
     'species=s'            => \my $species,
+    'canonical'            => \my $canonical,
 ) or pod2usage(2);
 
 Log::Log4perl->easy_init( { level => $log_level, layout => '%p %x %m%n' } );
@@ -84,12 +85,10 @@ const my @COLUMN_HEADERS => (
 'species',
 );
 
-# TODO add reason if I can
 const my @FAILED_COLUMN_HEADERS => qw(
 gene_id
 marker_symbol
 ensembl_id
-ensembl_id_b
 fail_reason
 critical_exons
 );
@@ -139,7 +138,7 @@ my @failed_targets;
 
 sub process_target {
     my $data = shift;
-    my $ensembl_id = get_ensembl_id( $data );
+    my $ensembl_id = $data->{ensembl_id};
     return unless $ensembl_id;
 
     INFO( 'Target gene: ' . $ensembl_id );
@@ -159,7 +158,13 @@ sub process_target {
         return;
     }
 
-    my @exons = @{ get_all_critical_exons( $gene, $data ) };
+    my @exons;
+    if ( $canonical ) {
+        @exons = @{ get_valid_canonical_exons( $gene, $data ) };
+    }
+    else {
+        @exons = @{ get_all_critical_exons( $gene, $data ) };
+    }
     unless ( @exons ) {
         ERROR('Unable to find any valid critical exons');
         $data->{fail_reason} = 'No critical exons found';
@@ -169,48 +174,16 @@ sub process_target {
 
     # targets
     my $transcript = $gene->canonical_transcript;
-    my $insertion_sites = get_intron_cassette_insertion_sites( \@exons, $transcript );
+    my ( $insertion_sites, $site_count ) = get_intron_cassette_insertion_sites( \@exons, $transcript );
     unless ( %{ $insertion_sites } ) {
         ERROR('Unable to find any insertion sites in critical exons');
-        $data->{fail_reason} = 'No insertion sites found';
+        $data->{fail_reason} = "No valid insertion sites found ( $site_count )";
         $data->{critical_exons} = join( '|', map{ $_->stable_id } @exons );
         push @failed_targets, $data;
         return;
     }
 
     print_targets( $insertion_sites, $gene, $data );
-
-    return;
-}
-
-sub get_ensembl_id {
-    my $data = shift;
-
-    if ( $data->{ensembl_id} ) {
-        if ( $data->{ensembl_id_b} ) {
-           if ( $data->{ensembl_id} eq $data->{ensembl_id_b} ) {
-               return $data->{ensembl_id}
-           }
-           else {
-               ERROR( 'Mismatch in ensembl ids: ' . $data->{ensembl_id} . ' and ' . $data->{ensembl_id_b});
-               push @failed_targets, $data;
-               return;
-           }
-        }
-        else {
-            return $data->{ensembl_id}
-        }
-    }
-    else {
-        if ( $data->{ensembl_id_b} ) {
-            return $data->{ensembl_id_b}
-        }
-        else {
-            ERROR( 'No Ensembl ID found' );
-            push @failed_targets, $data;
-            return;
-        }
-    }
 
     return;
 }
@@ -280,6 +253,37 @@ sub get_exon_rank {
     return 0;
 }
 
+=head2 get_valid_canonical_exons
+
+
+=cut
+sub get_valid_canonical_exons {
+    my ( $gene, $data ) = @_;
+
+    my %valid_exons;
+    my %transcript_exons;
+
+    my $transcript = $gene->canonical_transcript;
+
+    unless ( $transcript ) {
+        WARN( 'Can not find canonical transcripts for gene: ' . $gene->stable_id );
+        return [];
+    }
+
+    find_valid_exons( $transcript, \%valid_exons, \%transcript_exons );
+    unless ( keys %valid_exons ) {
+        WARN( 'No valid exons for gene: ' . $gene->stable_id );
+        return [];
+    }
+
+    my @valid_exons = values %valid_exons;
+
+    my $num_critical_exons = @valid_exons;
+    INFO( "Has $num_critical_exons critical exons" );
+
+    return \@valid_exons;
+}
+
 =head2 get_all_critical_exons
 
 All exons for the gene that are:
@@ -340,7 +344,7 @@ sub get_all_critical_exons {
 
 =head2 find_valid_exons
 
-Exons that have greater than 200 coding bases, and coding.
+Exons that have greater than 160 coding bases, and coding.
 Also must be within first 50% of coding sequence.
 
 Create hash of valid exons, keyed on stable id
@@ -362,7 +366,7 @@ sub find_valid_exons {
         }
 
         my $length = $exon->cdna_coding_end( $transcript ) - $exon->cdna_coding_start( $transcript ) + 1;
-        if ( $length < 201 ) {
+        if ( $length < 160 ) {
             DEBUG( 'Exon ' . $exon->stable_id . " only has $length coding bases " );
             next;
         }
@@ -465,6 +469,7 @@ to either side.
 sub get_intron_cassette_insertion_sites {
     my ( $exons, $transcript ) = @_;
 
+    my $count_sites = 0;
     #get the mid point in cdna co-ordinates
     my $cdna_mid = $transcript->cdna_coding_start + round( length($transcript->translateable_seq)/2 );
     my ( $middle ) = $transcript->cdna2genomic($cdna_mid, $cdna_mid);
@@ -476,9 +481,9 @@ sub get_intron_cassette_insertion_sites {
     for my $exon ( @{ $exons } ) {
         INFO( 'Searching for insertion sites in : ' . $exon->stable_id );
 
-        # must leave at least 100bp of coding sequence to either side of insertion site
-        my $start = $exon->coding_region_start( $transcript ) + 100;
-        my $end   = $exon->coding_region_end( $transcript ) - 100;
+        # must leave at least coding sequence to either side of insertion site
+        my $start = $exon->coding_region_start( $transcript ) + 80;
+        my $end   = $exon->coding_region_end( $transcript ) - 80;
 
         # insertion site must be within first 50% of coding sequences
         if( $strand == 1 && $end > $middle ) {
@@ -518,6 +523,7 @@ sub get_intron_cassette_insertion_sites {
                 $start_pos = $start + ( $length - $end_pos );
             }
             $sites{$start_pos} = $ins_site;
+            $count_sites++;
         }
 
         # If we have insertion sites filter out ones that have SapI sites within 1000 bases
@@ -551,8 +557,8 @@ sub get_intron_cassette_insertion_sites {
         }
 
         if ( exists $valid_sites{ $exon->stable_id }{sites} ) {
-            my $num_sites = keys %{ $valid_sites{ $exon->stable_id }{sites} };
-            INFO( ".. found $num_sites valid insertion sites" )
+            my $num_valid_sites = keys %{ $valid_sites{ $exon->stable_id }{sites} };
+            INFO( ".. found $num_valid_sites valid insertion sites" )
         }
         else {
             my $num_sites = keys %sites;
@@ -562,7 +568,7 @@ sub get_intron_cassette_insertion_sites {
 
     }
 
-    return \%valid_sites;
+    return ( \%valid_sites, $count_sites);
 }
 
 =head2 map_SapI_binding_sites
