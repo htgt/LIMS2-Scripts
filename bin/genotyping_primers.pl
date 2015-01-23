@@ -17,7 +17,7 @@ use LIMS2::Model::Util::OligoSelection qw(
 );
 
 my $plate_name_param = '';
-my $plate_well_param = '';
+my @plate_well_param; # plate_well_param is now an array of wells
 my $species_param = 'Human';
 my $assembly_param = '';
 my $crispr_type = 'pair';
@@ -35,7 +35,7 @@ my $update_data_param = 'NO'; # Don't update existing database data by default
 
 GetOptions(
     'plate=s'       => \$plate_name_param,
-    'well=s'        => \$plate_well_param,
+    'well=s'        => \@plate_well_param,
     'repeat_mask=s' => \@repeat_mask_param,
     'species=s'     => \$species_param,
     'crispr_type=s' => \$crispr_type,
@@ -73,7 +73,7 @@ if ($assembly_param eq '') {
 
 INFO( '-------------------- New Primer Calculation Begins -----------------------');
 my $data_clip;
-if ( $plate_well_param  eq '') {
+if ( ! @plate_well_param ) {
     if ( $crispr_type eq 'single' ) {
         $data_clip = primers_for_single_crispr_plate({
             'model' => $lims2_model,
@@ -107,7 +107,7 @@ else
             'd_plate_list' => \@d_plate_param,
             'species' => $species_param,
             'assembly' => $assembly_param,
-            'plate_well' => $plate_well_param,
+            'plate_well_list' => \@plate_well_param,
         });
     }
     else {
@@ -119,7 +119,7 @@ else
             'repeat_mask_list' => \@repeat_mask_param,
             'species' => $species_param,
             'assembly' => $assembly_param,
-            'plate_well' => $plate_well_param,
+            'plate_well_list' => \@plate_well_param,
             'crispr_pair_id' => $crispr_pair_id_param,
         });
     }
@@ -141,7 +141,7 @@ Usage: perl genotyping_primers.pl
     --plate=plate_name
     [--crispr_right=crispr_right_plate_name]
     [--crispr_left=crispr_left_plate_name]
-    [--well=well_name]
+    [--well=well_name [--well=well_name2] ...] Use multiple well params to specify a list of wells
     [--crispr_type=(single | pair)]
     [--species=(Human | Mouse)]
     [--assembly=assembly_name (e.g., GRCm38), default is the LIMS2 default assembly
@@ -173,7 +173,7 @@ sub primers_for_single_crispr_plate {
     my $d_plate_list = $p->{'d_plate_list'};
     my $species_input = $p->{'species'};
     my $assembly_input = $p->{'assembly'};
-    my $plate_well_input = $p->{'plate_well'};
+    my $plate_well_input = $p->{'plate_well_list'};
 
     my $dis_designs; # hash ref for disambiguation design list
 
@@ -217,18 +217,23 @@ sub primers_for_single_crispr_plate {
     my $well_count = @wells;
     $logger->info( 'Processing crispr primers for ' . $well_count . ' wells:');
     my @well_id_list;
+    my @wells_selected;
 
     # Select just the well we want
     if ( $plate_well_input ) {
-        $logger->info("Selecting well: [$plate_well_input]");
-        @wells = grep { $_->name =~ /$plate_well_input/  } @wells;
+        foreach my $well_select_name ( @{$plate_well_input} ) {
+            $logger->info("Selecting well: [$well_select_name]");
+            push @wells_selected, grep { $_->name =~ /$well_select_name/  } @wells;
+        }
+        @wells = @wells_selected;
     }
 
     foreach my $well ( @wells ) {
         push @well_id_list, $well->id;
     }
 
-    my $design_data_cache = $model->create_design_data_cache(
+    my $design_data_cache = create_design_data_cache(
+            $model,
             \@well_id_list,
         );
 
@@ -261,6 +266,19 @@ sub primers_for_single_crispr_plate {
     return $clip;
 }
 
+
+#TODO: modify this method to return a combined list of short and long arm designs
+
+sub create_design_data_cache {
+    my $model = shift;
+    my $well_id_list_ref = shift;
+    # Use a ProcessTree method to get the list of design wells.
+#    my $design_data_hash = $model->get_short_arm_design_data_for_well_id_list( $well_id_list_ref );
+    my $design_data_hash = $model->get_design_data_for_well_id_list( $well_id_list_ref );
+    return $design_data_hash;
+}
+
+
 sub primers_for_plate {
     my $p = shift;
 
@@ -269,7 +287,7 @@ sub primers_for_plate {
     my $repeat_mask = $p->{'repeat_mask_list'};
     my $species_input = $p->{'species'};
     my $assembly_input = $p->{'assembly'};
-    my $plate_well_input = $p->{'plate_well'};
+    my $plate_well_input = $p->{'plate_well_list'};
     my $crispr_pair_id = $p->{'crispr_pair_id'};
     my $plate_crispr_right = $p->{'plate_crispr_right'};
     my $plate_crispr_left = $p->{'plate_crispr_left'};
@@ -303,18 +321,23 @@ sub primers_for_plate {
     my $well_count = @wells;
     $logger->info( 'Processing crispr primers for ' . $well_count . ' wells:');
     my @well_id_list;
+    my @wells_selected;
 
     # Select just the well we want
     if ( $plate_well_input ) {
-        $logger->info("Selecting well: [$plate_well_input]");
-        @wells = grep { $_->name =~ /$plate_well_input/  } @wells;
+        foreach my $well_select_name ( @{$plate_well_input} ) {
+            $logger->info("Selecting well: [$well_select_name]");
+            push @wells_selected, grep { $_->name =~ /$well_select_name/  } @wells;
+        }
+        @wells = @wells_selected;
     }
 
     foreach my $well ( @wells ) {
         push @well_id_list, $well->id;
     }
 
-    my $design_data_cache = $model->create_design_data_cache(
+    my $design_data_cache = create_design_data_cache(
+            $model,
             \@well_id_list,
         );
 
@@ -374,7 +397,8 @@ sub create_d_plate_hash{
         }
     }
 
-    $dis_designs = $model->create_design_data_cache(
+    $dis_designs = create_design_data_cache(
+                $model,
                 \@well_id_list,
             );
 
@@ -516,7 +540,7 @@ sub run_single_crispr_primers {
     my $repeat_mask = $params->{'repeat_mask'};
     my $dis_designs = $params->{'dis_designs'};
 
-    my $formatted_well = $params->{'plate_well'} ? ('_' . $params->{'plate_well'}) : '';
+    my $formatted_well = $params->{'plate_well'} ? ('_' . join('_', @{$params->{'plate_well'}})) : '';
 
     my $lines;
     $logger->debug( 'Generating gene symbol cache' );
@@ -549,6 +573,7 @@ sub run_single_crispr_primers {
 
     if ( uc($pcr_primers_required) eq 'YES' ) {
         $logger->info( 'Generating PCR primers for crispr region' );
+        dump_params( $ENV{LIMS2_PRIMER3_PCR_CRISPR_PRIMER_CONFIG} );
         ($out_rows, $crispr_clip) = prepare_pcr_primers({
                 'model' => $model,
                 'crispr_clip' => $crispr_clip,
@@ -566,7 +591,7 @@ sub run_single_crispr_primers {
         $logger->info( 'PCR primers not required' );
     }
 
-    if ( uc($genotyping_primers_required) eq 'YES' ) {
+    if ( uc($genotyping_primers_required) =~ /YES|ONLY/ ) {
         $logger->info( 'Generating genotyping primers' );
         my $design_oligos;
         ($out_rows, $crispr_clip) = prepare_genotyping_primers({
@@ -604,7 +629,7 @@ sub run_primers {
     my $crispr_pair_id_inp = $params->{'crispr_pair_id'};
     my $assembly_id = $params->{'assembly_id'};
 
-    my $formatted_well = $params->{'plate_well'} ? ('_' . $params->{'plate_well'}) : '';
+    my $formatted_well = $params->{'plate_well'} ? ('_' . join('_', @{$params->{'plate_well'}})) : '';
 
     my $lines;
     $logger->debug( 'Generating gene symbol cache' );
@@ -615,7 +640,7 @@ sub run_primers {
             'species' => $species,
             'model' => $model,
         });
-    my ($out_rows, $crispr_clip ); 
+    my ($out_rows, $crispr_clip );
     if ( uc($crispr_primers_required) eq 'YES') {
         $logger->debug( 'Preparing crispr primers');
         ($out_rows, $crispr_clip ) = prepare_crispr_primers({
@@ -639,6 +664,7 @@ sub run_primers {
 
     if ( uc($pcr_primers_required) eq 'YES') {
         $logger->info( 'Generating PCR primers for crispr region' );
+        dump_params( $ENV{LIMS2_PRIMER3_PCR_CRISPR_PRIMER_CONFIG} );
         ($out_rows, $crispr_clip) = prepare_pcr_primers({
                 'model' => $model,
                 'crispr_clip' => $crispr_clip,
@@ -656,7 +682,7 @@ sub run_primers {
         $logger->info( 'PCR primers not required' );
     }
 
-    if ( uc($genotyping_primers_required) eq 'YES') {
+    if ( uc($genotyping_primers_required) =~ /YES|ONLY/) {
         $logger->info( 'Generating genotyping primers' );
         my $design_oligos;
         ($out_rows, $crispr_clip) = prepare_genotyping_primers({
@@ -680,6 +706,20 @@ sub run_primers {
     return $crispr_clip;
 }
 
+sub dump_params {
+    my $param_file_name = shift;
+
+    $logger->info( 'Dumping parameter file for: ' . $param_file_name );
+
+    open( my $fh, "<", $param_file_name )
+        or die "Unable to open parameter file: $param_file_name: $!";
+    while( <$fh> ) {
+        print $_;
+    }
+    close $fh;
+    $logger->info( 'End of file: ' . $param_file_name );
+    return;
+}
 
 sub prepare_pcr_primers {
     my $params = shift;
@@ -703,8 +743,7 @@ sub prepare_pcr_primers {
         next if $crispr_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
 
         my ($crispr_pcr_primers, $crispr_pcr_mapped, $chr_seq_start)
-            = LIMS2::Model::Util::OligoSelection::pick_crispr_PCR_primers( {
-                schema => $model->schema,
+            = LIMS2::Model::Util::OligoSelection::pick_crispr_PCR_primers( $model, {
                 well_id => $well,
                 crispr_primers => $crispr_clip->{$well_name},
                 species => $species,
@@ -728,7 +767,7 @@ sub prepare_pcr_primers {
 
             $csv_row = join( ',' , @out_vals);
             push @out_rows, $csv_row;
-            
+
             next;
         }
         # Take the two highest ranking primers
@@ -797,8 +836,6 @@ sub prepare_genotyping_primers {
     my $assembly_id = $params->{'assembly_id'};
 
 
-#    my %primer_clip;
-
     my $design_row;
     foreach my $well ( @{$wells} ) {
         my $well_id = $well->id;
@@ -810,11 +847,12 @@ sub prepare_genotyping_primers {
         $gene_name = $design_data_cache->{$well_id}->{'gene_symbol'};
 
         $logger->info( $design_id . "\t(" . $gene_name . ')' );
-        next if $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
-
-        my ($genotyping_primers, $genotyping_mapped, $chr_strand, $design_oligos, $chr_seq_start)
-            = LIMS2::Model::Util::OligoSelection::pick_genotyping_primers( {
-                schema => $model->schema,
+        # If we only want genotyping primers, crispr primers are irrelevant
+        if ($genotyping_primers_required ne 'ONLY') {
+            next if $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass';
+        }
+        my ($genotyping_primers, $genotyping_mapped, $chr_strand, $design_oligos, $chr_seq_start, $chr_name)
+            = LIMS2::Model::Util::OligoSelection::pick_genotyping_primers( $model, {
                 design_id => $design_id,
                 well_id => $well,
                 species => $species,
@@ -824,6 +862,7 @@ sub prepare_genotyping_primers {
         $primer_clip->{$well_name}{'gene_name'} = $gene_name;
         $primer_clip->{$well_name}{'design_id'} = $design_id;
         $primer_clip->{$well_name}{'strand'} = $chr_strand;
+        $primer_clip->{$well_name}{'chr_id'} = $model->get_chr_id_for_name( $species, $chr_name );
 
         $primer_clip->{$well_name}{'genotyping_primers'} = $genotyping_mapped;
         $primer_clip->{$well_name}{'design_oligos'} = $design_oligos;
@@ -839,12 +878,14 @@ sub prepare_genotyping_primers {
             $primer_clip->{$well_name}->{'design_id'},
             $primer_clip->{$well_name}->{'strand'},
         );
-        if ( $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass' ){
+        unless ( $genotyping_primers_required eq 'ONLY' ) {
+            if ( $primer_clip->{$well_name}->{'crispr_primers'}->{'error_flag'} ne 'pass' ){
 
-            $csv_row = join( ',' , @out_vals);
-            push @out_rows, $csv_row;
-            
-            next;
+                $csv_row = join( ',' , @out_vals);
+                push @out_rows, $csv_row;
+
+                next;
+            }
         }
         # Take the two highest ranking primers
         my ($rank_a, $rank_b) = get_best_two_primer_ranks( $primer_clip->{$well_name}->{$primer_type}->{'left'} );
@@ -967,6 +1008,10 @@ sub persist_primers {
     my $chr_end = $pc->{$well_name}->{$primer_type}->{$lr}->{$primer_name}->{'location'}->{'_end'}
         + $pc->{$well_name}->{'chr_seq_start'} - 1;
     my $chr_id = $pc->{$well_name}->{'crispr_seq'}->{'left_crispr'}->{'chr_id'}; # not the translated name
+    if ( ! $chr_id ) {
+	# Probably because we are only dealing with genotyping primers.
+        $chr_id = $pc->{$well_name}->{'chr_id'};
+    }
 
     my $crispr_primer_result;
     if ($primer_class eq 'genotyping' ) {
@@ -1049,6 +1094,7 @@ sub persist_primers {
             $search_params->{'primer_name'} = $primer_label;
             my $coderef = sub {
                 my $crispr_check_r = $model->schema->resultset('CrisprPrimer')->find( $search_params );
+                $logger->info( 'update_data = ' . $update_data_param );
                 if ( $crispr_check_r && ( $update_data_param eq 'YES' )) {
                     $logger->info( 'Deleting entry for '
                         . ($search_params->{'crispr_pair_id'} // $search_params->{'crispr_id'} )
@@ -1060,6 +1106,7 @@ sub persist_primers {
                         die;
                     }
                 }
+                $crispr_check_r = $model->schema->resultset('CrisprPrimer')->find( $search_params );
                 if ( ! $crispr_check_r ) {
                     $crispr_primer_result = $model->schema->resultset('CrisprPrimer')->create( $create_params );
                     if ( ! $crispr_primer_result ) {
@@ -1154,8 +1201,8 @@ sub prepare_single_crispr_primers {
         }
 
 
-        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_single_crispr_primers( {
-                schema => $model->schema,
+        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_single_crispr_primers(
+                $model, {
                 design_id => $design_id,
                 crispr_id => $crispr_id,
                 species => $species,
@@ -1249,12 +1296,13 @@ sub prepare_crispr_primers {
             # TODO: Add code to alter persistence behaviour
         }
 
-        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_crispr_primers( {
-                'schema' => $model->schema,
-                'design_id' => $design_id,
-                'crispr_pair_id' => $crispr_pair_id,
-                'species' => $species,
-                'repeat_mask' => $repeat_mask,
+        my ($crispr_results, $crispr_primers, $chr_strand, $chr_seq_start) = LIMS2::Model::Util::OligoSelection::pick_crispr_primers(
+                $model,
+                {
+                    'design_id' => $design_id,
+                    'crispr_pair_id' => $crispr_pair_id,
+                    'species' => $species,
+                    'repeat_mask' => $repeat_mask,
             });
         $primer_clip{$well_name}{'pair_id'} = $crispr_pair_id;
         $primer_clip{$well_name}{'gene_name'} = $gene_name;
@@ -1287,7 +1335,7 @@ sub prepare_crispr_primers {
 
             $csv_row = join( ',' , @out_vals);
             push @out_rows, $csv_row;
-            
+
             next;
         }
 
@@ -1307,7 +1355,7 @@ sub prepare_crispr_primers {
             $primer_clip{$well_name}->{'crispr_seq'}->{'right_crispr'}->{'id'},
             $primer_clip{$well_name}->{'crispr_seq'}->{'right_crispr'}->{'seq'},
         );
-        my $csv_row = join( ',' , @out_vals);
+        $csv_row = join( ',' , @out_vals);
         push @out_rows, $csv_row;
     }
 
@@ -1343,7 +1391,7 @@ sub check_primers_for_crispr_id {
     my $crispr_id = shift;
 
     my $crispr_primers_rs = $model->schema->resultset('CrisprPrimer')->search({
-        'crispr_pair_id' => $crispr_id,
+        'crispr_id' => $crispr_id,
     });
 
     return $crispr_primers_rs;
