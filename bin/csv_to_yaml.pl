@@ -10,8 +10,8 @@ use YAML::Any;
 
 my $log_level = $WARN;
 GetOptions(
-    'help'          => sub { pod2usage( -verbose => 1 ) },
-    'man'           => sub { pod2usage( -verbose => 2 ) },
+    'help' => sub { pod2usage( -verbose => 1 ) },
+    'man'  => sub { pod2usage( -verbose => 2 ) },
 ) or pod2usage(2);
 
 Log::Log4perl->easy_init( { level => $log_level, layout => '%p %x %m%n' } );
