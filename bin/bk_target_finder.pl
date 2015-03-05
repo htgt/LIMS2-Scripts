@@ -18,7 +18,7 @@ use Math::Round qw( round );
 =head2
 
 1/ All protein coding genes for Mouse / Human.
-2/ Get constitutive exons..
+2/ Get constitutive exons ( also option to only get exons on canonical transcript )
 3/ Find target exons:
     a/ First 50% of coding region
     b/ exon must be larger than 200 bp ( no exon fragments of less that 100bp can be created )
@@ -36,7 +36,7 @@ Input will also be feed into design creation, gibson designs, with inner primers
 - exon ( exon id, rank, size )
 - intron insertion ( sequence & coordinate )
 
-Output fill feed into next script that finds crisprs for insertions
+Output will feed into next script ( bk_target_crispr_finder.pl ) that finds crisprs for insertions
 
 FAILED TARGETS:
 Info on genes we do not find intron insertion points for
@@ -45,8 +45,8 @@ Info on genes we do not find intron insertion points for
 
 my $log_level = $WARN;
 GetOptions(
-    'help'                 => sub { pod2usage( -verbose    => 1 ) },
-    'man'                  => sub { pod2usage( -verbose    => 2 ) },
+    'help'                 => sub { pod2usage( -verbose => 1 ) },
+    'man'                  => sub { pod2usage( -verbose => 2 ) },
     'debug'                => sub { $log_level = $DEBUG },
     'verbose'              => sub { $log_level = $INFO },
     'trace'                => sub { $log_level = $TRACE },
@@ -54,7 +54,10 @@ GetOptions(
     'gene=s'               => \my $single_gene,
     'species=s'            => \my $species,
     'canonical'            => \my $canonical,
+    'coding-flank=i'       => \my $custom_coding_flank,
 ) or pod2usage(2);
+
+my $CODING_FLANK = $custom_coding_flank || 100;
 
 Log::Log4perl->easy_init( { level => $log_level, layout => '%p %x %m%n' } );
 LOGDIE( 'Specify file with gene names' ) unless $genes_file;
@@ -482,8 +485,8 @@ sub get_intron_cassette_insertion_sites {
         INFO( 'Searching for insertion sites in : ' . $exon->stable_id );
 
         # must leave at least coding sequence to either side of insertion site
-        my $start = $exon->coding_region_start( $transcript ) + 80;
-        my $end   = $exon->coding_region_end( $transcript ) - 80;
+        my $start = $exon->coding_region_start( $transcript ) + $CODING_FLANK;
+        my $end   = $exon->coding_region_end( $transcript ) - $CODING_FLANK;
 
         # insertion site must be within first 50% of coding sequences
         if( $strand == 1 && $end > $middle ) {
@@ -608,12 +611,11 @@ __END__
 
 =head1 NAME
 
-bk_design_targets.pl - Create design targets list given list of gene names.
+bk_target_finder.pl - Find custom target sites for BK  ( Bon-Kyoung )
 
 =head1 SYNOPSIS
 
-  gibson_design_targets.pl [options]
-
+  bk_target_finder.pl [options]
       --help            Display a brief help message
       --man             Display the manual page
       --debug           Debug output
@@ -622,6 +624,8 @@ bk_design_targets.pl - Create design targets list given list of gene names.
       --genes-file      File with genes names.
       --gene            Specify only one gene from the file
       --species         Species of targets ( default Human )
+      --canonical       Use exons from canonical transcript instead of critical exons
+      --coding-flank    Number of coding bases in exon that must flank insertion site
 
       The genes file should be a csv file with 3 column headers: gene_id, marker_symbol and ensembl_id.
       The gene_id column will use HGNC ids or MGI ID's
@@ -629,9 +633,5 @@ bk_design_targets.pl - Create design targets list given list of gene names.
 
 =head1 DESCRIPTION
 
-
-=head1 AUTHOR
-
-Sajith Perera
 
 =cut
