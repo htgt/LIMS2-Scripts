@@ -30,6 +30,7 @@ Log::Log4perl->easy_init( { level => $log_level, layout => '%p %x %m%n' } );
 
 LOGDIE( 'Specify file with targets' ) unless $targets_file;
 LOGDIE( 'Must specify species' ) unless $species;
+$species = 'Grch38' if $species eq 'Human';
 
 my $wge = WGE::Model::DB->new;
 INFO( "Finding species $species in WGE");
