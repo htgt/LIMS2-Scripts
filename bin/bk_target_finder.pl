@@ -64,7 +64,7 @@ LOGDIE( 'Specify file with gene names' ) unless $genes_file;
 LOGDIE( 'Must specify species' ) unless $species;
 
 const my $DEFAULT_ASSEMBLY => $species eq 'Human' ? 'GRCh38' :  $species eq 'Mouse' ? 'GRCm38' : undef;
-const my $DEFAULT_BUILD => 76;
+const my $DEFAULT_BUILD => 79;
 
 LOGDIE( "Can not work out default assembly for species $species" ) unless $DEFAULT_ASSEMBLY;
 
