@@ -117,7 +117,7 @@ sub find_target_crisprs {
                 chr_end   => $data->{ins_end},
                 strand    => $data->{chr_strand},
                 seq       => $data->{ins_seq},
-            } 
+            }
         );
     }
     else {
@@ -128,7 +128,7 @@ sub find_target_crisprs {
                 chr_end   => $data->{ins_end},
                 strand    => $data->{chr_strand},
                 seq       => $data->{ins_seq},
-            } 
+            }
         );
     }
 
