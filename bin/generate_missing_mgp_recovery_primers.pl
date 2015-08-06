@@ -12,13 +12,13 @@ my $model = LIMS2::Model->new( user => 'webapp', audit_user => $ENV{USER}.'@sang
 my $primer_util = LIMS2::Util::QcPrimers->new({
     primer_project_name => 'mgp_recovery',
     model               => $model,
-    base_dir            => "/nfs/users/nfs_a/af11/tmp/mgp_primers",
+    base_dir            => "mgp_primers",
     persist_primers     => 1,
     overwrite           => 0,
     run_on_farm         => 0,
 });
 
-open (my $fh, ">", "/nfs/users/nfs_a/af11/tmp/mgp_primers/log.txt") or die $!;
+open (my $fh, ">", "log.txt") or die $!;
 
 # For each mgp repovery project
 # get all experiments, get crispr groups
