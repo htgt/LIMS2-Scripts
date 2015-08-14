@@ -8,9 +8,21 @@ use Getopt::Long;
 use Pod::Usage;
 use IPC::System::Simple qw( system );
 
-#as team87 run:
-#perl /nfs/users/nfs_a/ah19/cleanup_qc.pl --dir qc --do-it
-#perl /nfs/users/nfs_a/ah19/cleanup_qc.pl --dir lims2_qc --do-it
+# EXAMPLE (except lims2_crispr_es_qc):
+# needs to run as t87perl...
+# ssh htgt2
+# cd /htgt/live/current/
+# source setup.sh
+# htgt t87perl
+# cd my_folder/LIMS2-Scripts/bin
+# perl cleanup_qc.pl --dir qc --do-it
+
+# EXAMPLE (only lims2_crispr_es_qc):
+# needs to run as t87svc...
+# ssh t87-dev
+# vmadmin
+# cd my_folder/LIMS2-Scripts/bin
+# perl cleanup_qc.pl --dir lims2_crispr_es_qc --do-it
 
 #make sure they specified SOMETHING
 pod2usage(2) unless @ARGV;
@@ -30,24 +42,25 @@ pod2usage(1) if $help;
 
 #only allow deletion from directories specified in this hash
 my %valid_dirs = (
-    qc            => 'qc',
-    prescreen_qc  => 'prescreen_qc',
-    lims2_qc      => 'lims2_qc',
-    lims2_designs => 'lims2_designs'
+    qc                 => 'qc',
+    prescreen_qc       => 'prescreen_qc',
+    lims2_qc           => 'lims2_qc',
+    lims2_designs      => 'lims2_designs',
+    lims2_crispr_es_qc => 'lims2_crispr_es_qc',
 );
 
 #make sure we only get a valid folder, wouldn't want someone accidentally deleting loads of stuff
 die "The directory to clean must be one of: " . join( ", ", keys %valid_dirs ) . "\n"
     unless exists $valid_dirs{ $user_dir };
 
-my $dir = dir("/", "lustre", "scratch110", "sanger", "team87", $valid_dirs{ $user_dir } );
+my $dir = dir("/", "lustre", "scratch109", "sanger", "team87", $valid_dirs{ $user_dir } );
 my @runs = get_all_runs( $dir );
 
 #make sure there are enough runs in the folder to delete anything
 die "Less than 50 runs present: " . scalar @runs . ". Nothing will be deleted.\n"
     unless @runs > $max_per_folder;
 
-#remove all runs we want to keep from the list (the first runs are the oldest) 
+#remove all runs we want to keep from the list (the first runs are the oldest)
 my @to_delete = @runs[ 0 .. (@runs - $max_per_folder) - 1 ];
 
 print scalar @to_delete . " to be deleted from $dir\n";
@@ -55,7 +68,12 @@ print scalar @to_delete . " to be deleted from $dir\n";
 #loop through the runs, and delete them if --do-it is set.
 for my $run ( @to_delete ) {
     my $cmd = sprintf( "rm -rf '%s'", $dir->subdir( $run->{ run_id } ) );
-    
+
+    if ($valid_dirs{ $user_dir } eq 'lims2_crispr_es_qc') {
+        $cmd = sprintf( "sudo -u t87svc rm -rf '%s'", $dir->subdir( $run->{ run_id } ) );
+    }
+
+
     if ( $delete ) {
         print "Deleting " . $run->{ run_id } . "\n";
         system( $cmd );
@@ -69,19 +87,25 @@ for my $run ( @to_delete ) {
 sub get_all_runs {
     my ( $dir ) = @_;
 
+    my $check_file = 'params.yaml';
+    # if lims2_crispr_es_qc, params.yaml doen not exist. qc_run_data.yaml replaces it.
+    if ( $dir =~ /\/lims2_crispr_es_qc/ ) {
+        $check_file = 'qc_run_data.yaml';
+    }
+
     #only add directories that are (hopefully) uuids with a params.yaml file inside.
     #(uuids are always 36 chars long)
-    my @child_dirs = grep { $_->is_dir 
-                        and -e $_->file( 'params.yaml' )
+    my @child_dirs = grep { $_->is_dir
+                        and -e $_->file( $check_file )
                         and length( $_->basename ) == 36 } $dir->children;
 
     #get an array of hashrefs sorted by created time with just the information we want.
     my @runs = sort { $a->{ ctime } <=> $b->{ ctime } }
-                    map { 
-                            { 
-                                run_id => $_->basename, 
-                                ctime  => $_->file("params.yaml")->stat->ctime 
-                            } 
+                    map {
+                            {
+                                run_id => $_->basename,
+                                ctime  => $_->file( $check_file )->stat->ctime
+                            }
                     } @child_dirs;
 
     return @runs;
