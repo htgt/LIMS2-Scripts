@@ -30,7 +30,7 @@ foreach my $crispr (@crisprs){
 	);
 
     my ($exon) = @{ $slice->get_all_Exons };
-    
+
     # Check we found the exon
     unless($exon){
     	warn "$counter: No exon found for crispr ".$crispr->id;
@@ -46,7 +46,7 @@ foreach my $crispr (@crisprs){
     	my @crispr_wells;
     	foreach my $process_crispr ( $crispr->process_crisprs ){
     		my $process = $process_crispr->process;
-    		push @crispr_wells, $process->output_wells; 
+    		push @crispr_wells, $process->output_wells;
     	}
     	my $well_names = join "/",( map { $_->as_string } @crispr_wells );
 
@@ -60,16 +60,16 @@ foreach my $crispr (@crisprs){
     	my @ep_wells = map { $_->descendants_of_type('CRISPR_EP') } @crispr_wells;
     	my $ep_names = join "/", (map { $_->as_string } @ep_wells );
 
-    	print $output join ",", 
-    	$crispr->id, 
-    	$crispr->start, 
-    	$crispr->end, 
+    	print $output join ",",
+    	$crispr->id,
+    	$crispr->start,
+    	$crispr->end,
     	$well_names,
         $assembly_names,
         $ep_names,
         $exon->get_nearest_Gene->external_name,
-    	$exon->stable_id, 
-    	$exon_start, 
+    	$exon->stable_id,
+    	$exon_start,
     	$exon_end;
 
         print $output "\n";
