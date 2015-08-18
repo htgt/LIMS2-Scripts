@@ -122,12 +122,8 @@ sub build_plate_array {
         if ( $plate->{_column_data}->{final_cassette_promoter} == 1 ){
             $promoter_state = "Promoter driven";
         }
-        elsif ( $plate->{_column_data}->{final_cassette_promoter} == 0 ){
+        else{
             $promoter_state = "Promoterless";
-        }
-        #Initially undefined would fall into Promoterless so a catch was needed
-        else {
-            $promoter_state = "Not defined";
         }
     }
     else{
@@ -146,22 +142,23 @@ sub build_plate_array {
         $loxp_end = $plate->{_column_data}->{design_type};
     }
 
-    push(@plate_array, $epd_name);
-    push(@plate_array, $plate->{_column_data}->{ep_first_cell_line_name});
-    push(@plate_array, $plate->{_column_data}->{int_backbone_name});
-    push(@plate_array, $plate->{_column_data}->{final_cassette_name});
-    push(@plate_array, $promoter_state);
-    push(@plate_array, $plate->{_column_data}->{final_plate_name});
-    push(@plate_array, $plate->{_column_data}->{final_backbone_name});
-    push(@plate_array, $plate->{_column_data}->{design_gene_symbol});
-    push(@plate_array, $plate->{_column_data}->{design_id});
-    push(@plate_array, $plate->{_column_data}->{design_type});
-    push(@plate_array, $loxp_start);
-    push(@plate_array, $loxp_end);
-    push(@plate_array, $design_info_ref->_build_cassette_start);
-    push(@plate_array, $design_info_ref->_build_cassette_end);
-    push(@plate_array, $design_info_ref->_build_homology_arm_start);
-    push(@plate_array, $design_info_ref->_build_homology_arm_end);
+    @plate_array = (
+        $epd_name,
+        $plate->{_column_data}->{ep_first_cell_line_name},
+        $plate->{_column_data}->{int_backbone_name},
+        $plate->{_column_data}->{final_cassette_name},
+        $promoter_state,
+        $plate->{_column_data}->{final_plate_name},
+        $plate->{_column_data}->{final_backbone_name},
+        $plate->{_column_data}->{design_gene_symbol},
+        $plate->{_column_data}->{design_id},
+        $plate->{_column_data}->{design_type},
+        $loxp_start,
+        $loxp_end,
+        $design_info_ref->_build_cassette_start,
+        $design_info_ref->_build_cassette_end,
+        $design_info_ref->_build_homology_arm_start,
+        $design_info_ref->_build_homology_arm_end,
+    );
     return @plate_array;
-
 }
