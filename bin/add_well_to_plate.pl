@@ -34,9 +34,18 @@ my %FIELD_NAMES = (
 
 my $model = LIMS2::Model->new( user => 'webapp', audit_user => $ENV{USER}.'@sanger.ac.uk' );
 
-{
-    my ( $target_well, $template_well ) = ( "C03", "A01" );
-    my $user = "ah19\@sanger.ac.uk";
+# well locations to add to the target plate (in this case all have the same parent well)
+my @new_wells = qw(F09 G09 H09 A10 B10 C10 D10 E10 F10 G10 H10 A11 B11 C11 D11 E11 F11 G11 H11 A12 B12 C12 D12 E12 F12 G12 H12);
+
+foreach my $target_well (@new_wells){
+    my $template_well  = "A01" ;
+
+    my $parent_plate = "HEP01000";
+    my $parent_well = "B01";
+
+    my $target_plate = "HEPD1000_1";
+
+    my $user = "af11\@sanger.ac.uk";
 
     # add_design_well( $user, "HG0", $target_well, 1015707 );
 
@@ -132,9 +141,9 @@ my $model = LIMS2::Model->new( user => 'webapp', audit_user => $ENV{USER}.'@sang
         #EP
         {
             #parent_plate => "HFA0",
-            parent_plate => "TP53_MK2",
-            parent_well  => "A01",
-            target_plate => "HUEP0",
+            parent_plate => $parent_plate,
+            parent_well  => $parent_well,
+            target_plate => $target_plate,
             target_well  => $target_well,
             template_well => $template_well,
         }
