@@ -8,13 +8,15 @@ use Log::Log4perl qw( :easy );
 use Data::Dumper;
 use feature qw(say);
 
-open (my $output, ">", "intronic_crisprs.csv");
+my $species = 'Mouse';
+
+open (my $output, ">", $species."_intronic_crisprs.csv");
 print $output join ",",qw(crispr_id crispr_chr crispr_start crispr_end crispr_wells assembly_wells ep_wells gene_name);
 print $output "\n";
 my $model = LIMS2::Model->new( user => 'lims2' );
 
 # I think we only care about crisprs we have started work on, e.g. plated crisprs
-my $crispr_rs = $model->schema->resultset('ProcessCrispr')->search_related('crispr', { crispr_loci_type_id => 'Intronic', species_id => 'Human' });
+my $crispr_rs = $model->schema->resultset('ProcessCrispr')->search_related('crispr', { crispr_loci_type_id => 'Intronic', species_id => $species });
 my @crisprs = $crispr_rs->search({},{ distinct => 1, order_by => { '-asc' => 'id' } });
 
 say "We have ".scalar(@crisprs)." crisprs to check";
