@@ -37,6 +37,8 @@ INFO( "Finding species $species in WGE");
 my $SPECIES_ID = $wge->resultset('Species')->find( { id => $species } )->numerical_id;
 die "Couldn't find species $species" unless $SPECIES_ID;
 
+$species = 'Human' if $species eq 'Grch38';
+
 my $input_csv = Text::CSV->new();
 open ( my $input_fh, '<', $targets_file ) or die( "Can not open $targets_file " . $! );
 $input_csv->column_names( @{ $input_csv->getline( $input_fh ) } );
@@ -44,7 +46,7 @@ $input_csv->column_names( @{ $input_csv->getline( $input_fh ) } );
 my @failed_targets;
 my @original_fields = $input_csv->column_names;
 push @original_fields, 'fail_reason';
-my $failed_output = IO::File->new( 'failed_crispr_targets.csv' , 'w' );
+my $failed_output = IO::File->new( "failed_crisprs_${targets_file}" , 'w' );
 my $failed_output_csv = Text::CSV->new( { eol => "\n" } );
 $failed_output_csv->print( $failed_output, \@original_fields );
 
@@ -73,7 +75,7 @@ const my @COLUMN_HEADERS => (
 'off_target_summary',
 );
 
-my $output = IO::File->new( 'crisprs_for_targets.csv' , 'w' );
+my $output = IO::File->new( "crisprs_${targets_file}" , 'w' );
 my $output_csv = Text::CSV->new( { eol => "\n" } );
 $output_csv->print( $output, \@COLUMN_HEADERS );
 
@@ -139,7 +141,10 @@ sub find_target_crisprs {
         return;
     }
 
-    my @valid_crisprs = grep{ is_valid_crispr( $_ ) } map{ $_->as_hash } @crisprs;
+    # Check for valic (containing off-targets) crisprs, or let all crisprs be valid.
+    # my @valid_crisprs = grep{ is_valid_crispr( $_ ) } map{ $_->as_hash } @crisprs;
+    my @valid_crisprs = map{ $_->as_hash } @crisprs;
+
     unless ( @valid_crisprs ) {
         my $num_crisprs = @crisprs;
         $data->{fail_reason} = "Found $num_crisprs crispr(s) but non are valid";
@@ -151,6 +156,8 @@ sub find_target_crisprs {
     DEBUG( ".. found $num_valid_crisprs valid crisprs" );
 
     print_target( $data, \@valid_crisprs );
+
+    return;
 }
 
 =head2 crisprs_overlapping_region
@@ -207,6 +214,7 @@ sub crisprs_overlapping_region {
 
 =head2 crisprs_flanking_region
 
+Search crisprs in a region within N bp from insertion site
 
 =cut
 sub crisprs_flanking_region {
@@ -239,7 +247,7 @@ sub region_str {
 
 =head2 is_valid_crispr
 
-desc
+This is checking if crispr has off_target_summary. Skip it for now.
 
 =cut
 sub is_valid_crispr {
@@ -254,6 +262,7 @@ sub is_valid_crispr {
 
 =head2 print_target
 
+Prints out the output file
 
 =cut
 sub print_target {
@@ -293,3 +302,32 @@ sub print_target {
 
     return;
 }
+
+
+__END__
+
+=head1 NAME
+
+bk_target_crispr_finder.pl - Find crisprs in custom target sites for BK  ( Bon-Kyoung )
+
+=head1 SYNOPSIS
+
+  bk_target_finder.pl [options]
+      --help            Display a brief help message
+      --man             Display the manual page
+      --debug           Debug output
+      --verbose         Verbose output
+      --trace           Trace output
+      --target-file     File with the targets, generated from bk_target_finder.pl
+      --gene            Specify only one gene from the file
+      --species         Species of targets ( Human / Mouse )
+      --flanking        Search crisprs within flanking base pairs of target site
+
+      The genes file should be a csv file with 3 column headers: gene_id, marker_symbol and ensembl_id.
+      The gene_id column will use HGNC ids or MGI ID's
+      A fourth optionally column is exon_ids if the critical exons have been pre-defined.
+
+=head1 DESCRIPTION
+
+
+=cut

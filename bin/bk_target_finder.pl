@@ -54,10 +54,14 @@ GetOptions(
     'gene=s'               => \my $single_gene,
     'species=s'            => \my $species,
     'canonical'            => \my $canonical,
+    'coding-region=i'      => \my $custom_coding_region,
     'coding-flank=i'       => \my $custom_coding_flank,
+    'sap1-flank=i'         => \my $custom_sap1_flank,
 ) or pod2usage(2);
 
-my $CODING_FLANK = $custom_coding_flank || 100;
+my $CODING_REGION = $custom_coding_region ? ($custom_coding_region / 100) : 0.5;
+my $CODING_FLANK = $custom_coding_flank || 60;
+my $SAP1_FLANK = $custom_sap1_flank || 300;
 
 Log::Log4perl->easy_init( { level => $log_level, layout => '%p %x %m%n' } );
 LOGDIE( 'Specify file with gene names' ) unless $genes_file;
@@ -102,11 +106,11 @@ my $db_details = $db->to_hash;
 WARN("Ensembl DB: " . $db_details->{'-DBNAME'});
 
 my ( $output, $output_csv, $failed_output, $failed_output_csv );
-$output = IO::File->new( 'targets.csv' , 'w' );
+$output = IO::File->new( "targets_${genes_file}" , 'w' );
 $output_csv = Text::CSV->new( { eol => "\n" } );
 $output_csv->print( $output, \@COLUMN_HEADERS );
 
-$failed_output = IO::File->new( 'failed.csv' , 'w' );
+$failed_output = IO::File->new( "failed_targets_${genes_file}" , 'w' );
 $failed_output_csv = Text::CSV->new( { eol => "\n" } );
 $failed_output_csv->print( $failed_output, \@FAILED_COLUMN_HEADERS );
 
@@ -169,8 +173,8 @@ sub process_target {
         @exons = @{ get_all_critical_exons( $gene, $data ) };
     }
     unless ( @exons ) {
-        ERROR('Unable to find any valid critical exons');
-        $data->{fail_reason} = 'No critical exons found';
+        ERROR('Unable to find any valid exons');
+        $data->{fail_reason} = 'No valid exons found';
         push @failed_targets, $data;
         return;
     }
@@ -179,7 +183,7 @@ sub process_target {
     my $transcript = $gene->canonical_transcript;
     my ( $insertion_sites, $site_count ) = get_intron_cassette_insertion_sites( \@exons, $transcript );
     unless ( %{ $insertion_sites } ) {
-        ERROR('Unable to find any insertion sites in critical exons');
+        ERROR('Unable to find any insertion sites');
         $data->{fail_reason} = "No valid insertion sites found ( $site_count )";
         $data->{critical_exons} = join( '|', map{ $_->stable_id } @exons );
         push @failed_targets, $data;
@@ -359,7 +363,7 @@ sub find_valid_exons {
     my @valid_exons;
     my @exons = @{ $transcript->get_all_Exons };
 
-    my $cdna_mid = $transcript->cdna_coding_start + round( length($transcript->translateable_seq)/2 );
+    my $cdna_mid = $transcript->cdna_coding_start + round( $CODING_REGION * length($transcript->translateable_seq) );
 
     for my $exon ( @exons ) {
         # skip exons which are non-coding
@@ -369,7 +373,7 @@ sub find_valid_exons {
         }
 
         my $length = $exon->cdna_coding_end( $transcript ) - $exon->cdna_coding_start( $transcript ) + 1;
-        if ( $length < 160 ) {
+        if ( $length < (2 * $CODING_FLANK) ) {
             DEBUG( 'Exon ' . $exon->stable_id . " only has $length coding bases " );
             next;
         }
@@ -515,12 +519,13 @@ sub get_intron_cassette_insertion_sites {
 
         # search for intron cassette insertion sites in sequence
         my %sites;
-        while ( $seq =~ /([AC]AG[GA])/g ) {
+        while ( $seq =~ /([AC]?AG[GA])/g ) {
             my $ins_site = $1;
             my $end_pos = pos $seq;
+
             my $start_pos;
             if ( $strand == 1 ) {
-                $start_pos = $start + ( $end_pos - 4 );
+                $start_pos = $start + ( $end_pos - length($ins_site) );
             }
             else {
                 $start_pos = $start + ( $length - $end_pos );
@@ -534,21 +539,22 @@ sub get_intron_cassette_insertion_sites {
         if ( %sites ) {
             $valid_sites{$exon->stable_id}{length} = $exon->length;
             my ( $search_start, $search_end ) = minmax keys %sites;
-            $search_start -= 1000;
-            $search_end   += 1000;
-            my $slice = $ensembl_util->slice_adaptor->fetch_by_region(
+            $search_start -= $SAP1_FLANK;
+            $search_end   += $SAP1_FLANK;
+            my $site_slice = $ensembl_util->slice_adaptor->fetch_by_region(
                 "chromosome",
                 $transcript->seq_region_name,
                 $search_start,
                 $search_end,
             );
             # get array of SapI binding site coordinates
-            my @sapI_sites = @{ map_SapI_binding_sites( $slice->seq, $search_start ) };
+            my @sapI_sites = @{ map_SapI_binding_sites( $site_slice->seq, $search_start ) };
 
             for my $ins_site_start ( keys %sites ) {
-                my $search_start = $ins_site_start - 1000;
-                my $search_end   = $ins_site_start + 1004; # the cassette insertion site is 4 bases, hense 1004
-                if ( any { $_ > $search_start && $_ < $search_end } @sapI_sites ) {
+                my $region_start = $ins_site_start - $SAP1_FLANK;
+                my $region_end   = $ins_site_start + $SAP1_FLANK + length($sites{$ins_site_start}); # the cassette insertion site size
+
+                if ( any { $_ > $region_start && $_ < $region_end } @sapI_sites ) {
                     next;
                 }
                 $valid_sites{$exon->stable_id}{sites}{$ins_site_start} = $sites{ $ins_site_start };
@@ -625,7 +631,9 @@ bk_target_finder.pl - Find custom target sites for BK  ( Bon-Kyoung )
       --gene            Specify only one gene from the file
       --species         Species of targets ( default Human )
       --canonical       Use exons from canonical transcript instead of critical exons
-      --coding-flank    Number of coding bases in exon that must flank insertion site
+      --coding-region   Exon must be in first coding-region percentage (default 50)
+      --coding-flank    Number of coding bases in exon that must flank insertion site (default 60)
+      --sap1-flank      Number of coding bases flanking insertion site that must not contain a Sap1 site (default 300)
 
       The genes file should be a csv file with 3 column headers: gene_id, marker_symbol and ensembl_id.
       The gene_id column will use HGNC ids or MGI ID's
