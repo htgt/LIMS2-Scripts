@@ -363,6 +363,9 @@ sub find_valid_exons {
     my @valid_exons;
     my @exons = @{ $transcript->get_all_Exons };
 
+    # if cannot find start of coding, exit
+    return unless $transcript->cdna_coding_start;
+
     my $cdna_mid = $transcript->cdna_coding_start + round( $CODING_REGION * length($transcript->translateable_seq) );
 
     for my $exon ( @exons ) {
