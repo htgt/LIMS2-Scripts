@@ -57,6 +57,7 @@ GetOptions(
     'coding-region=i'      => \my $custom_coding_region,
     'coding-flank=i'       => \my $custom_coding_flank,
     'sap1-flank=i'         => \my $custom_sap1_flank,
+    'tg-site'              => \my $tg,
 ) or pod2usage(2);
 
 my $CODING_REGION = $custom_coding_region ? ($custom_coding_region / 100) : 0.5;
@@ -105,12 +106,15 @@ my $db = $ensembl_util->db_adaptor;
 my $db_details = $db->to_hash;
 WARN("Ensembl DB: " . $db_details->{'-DBNAME'});
 
+my $suffix = 'ac';
+if ($tg) { $suffix = 'tg' };
+
 my ( $output, $output_csv, $failed_output, $failed_output_csv );
-$output = IO::File->new( "targets_${genes_file}" , 'w' );
+$output = IO::File->new( "${suffix}_targets_${genes_file}" , 'w' );
 $output_csv = Text::CSV->new( { eol => "\n" } );
 $output_csv->print( $output, \@COLUMN_HEADERS );
 
-$failed_output = IO::File->new( "failed_targets_${genes_file}" , 'w' );
+$failed_output = IO::File->new( "${suffix}_failed_targets_${genes_file}" , 'w' );
 $failed_output_csv = Text::CSV->new( { eol => "\n" } );
 $failed_output_csv->print( $failed_output, \@FAILED_COLUMN_HEADERS );
 
@@ -522,7 +526,9 @@ sub get_intron_cassette_insertion_sites {
 
         # search for intron cassette insertion sites in sequence
         my %sites;
-        while ( $seq =~ /([AC]?AG[GA])/g ) {
+        my $search_site = '([AC]AG[GA])';
+        if ($tg) { $search_site = '([TG]AG[GA])' };
+        while ( $seq =~ /${search_site}/g ) {
             my $ins_site = $1;
             my $end_pos = pos $seq;
 
