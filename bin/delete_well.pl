@@ -15,18 +15,29 @@ GetOptions(
     'man'          => sub { pod2usage( -verbose => 2 ) },
     'plate_name=s' => \my $plate,
     'well_name=s'  => \my $well,
+    'barcode=s'    => \my $barcode,
     'commit'       => \my $commit,
 );
 
-if ( !$well && !$plate ) {
-    die('Must specify and plate and well');
+if ( (!$well && !$plate) && !$barcode ) {
+    die('Must specify plate and well, or barcode');
 }
 
 $model->txn_do(
     sub {
         try{
-            $model->delete_well( { plate_name => $plate, well_name => $well } );
-            print "deleted well $plate [$well]\n";
+            my $params = {};
+            my $name;
+            if($barcode){
+                $params = { barcode => $barcode };
+                $name = "barcode: $barcode";
+            }
+            else{
+                $params = { plate_name => $plate, well_name => $well };
+                $name = "$plate [$well]";
+            }
+            $model->delete_well( $params );
+            print "deleted well $name\n";
             unless ( $commit ) {
                 print "non-commit mode, rollback\n";
                 $model->txn_rollback;
