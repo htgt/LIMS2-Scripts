@@ -10,6 +10,11 @@ use Getopt::Long;
 #   samples: csv file containing 5 columns: Experiment ID, crispr seq, crispr strand, amplicon seq, barcode range
 #   dir    : directory containing input fastq files (1 per barcode with names containing _S<barcode number>_ and R1 or R2)
 
+# NB: Experiment ID is just a unique identifier for the combination of amplicon and crispr used.
+# It is not a LIMS2 experiment ID at this stage in development.
+
+my $crispresso = $ENV{CRISPRESSO_CMD} || "/nfs/team87/farm3_lims2_vms/software/python_local/bin/CRISPResso";
+
 GetOptions(
     'samples=s' => \my $samples_file_name,
     'dir=s'      => \my $dir_name,
@@ -46,7 +51,7 @@ foreach my $line (@samples_info){
         my ($file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
         if($file){
         	my $output_dir = "S$barcode"."_exp$exp_id";
-            my $crispresso_cmd = "./bin/CRISPResso -w 30 --hide_mutations_outside_window_NHEJ --ignore_substitutions"
+            my $crispresso_cmd = "$crispresso -w 30 --hide_mutations_outside_window_NHEJ --ignore_substitutions"
                                  ." -o $output_dir"
                                  ." -r1 $file"
                                  ." -a $amplicon_start"
