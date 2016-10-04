@@ -9,7 +9,8 @@ use Text::CSV;
 
 # Inputs:
 #   samples: csv file containing 5 columns: Experiment ID, crispr seq, crispr strand, amplicon seq, barcode range
-#   dir    : directory containing input fastq files (1 per barcode with names containing _S<barcode number>_ and R1 or R2)
+#   dir    : directory containing CRISPResso results directories as created by bsub_crispresso_jobs.pl
+#   output : name of file to write summary info to
 
 GetOptions(
     'samples=s' => \my $samples_file_name,
