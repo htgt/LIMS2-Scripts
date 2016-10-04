@@ -16,6 +16,7 @@ foreach my $dir_name (@dir_names){
 	    if($suffix eq 'seq'){
 	    	my $content = $data_file->slurp;
 	    	$content =~ s/^>\S*/> $base/g;
+
 	    	$data_file->spew($content);
 	    }
 	}
