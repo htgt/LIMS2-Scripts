@@ -32,8 +32,6 @@ sub _build_lims2_api {
 
     return LIMS2::REST::Client->new_with_config();
 }
-print $ENV{LIMS2_REST_CLIENT};
-my $rest = _build_lims2_api();
 
 my $lims = {
     lims2_api         => _build_lims2_api(),
