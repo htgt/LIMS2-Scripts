@@ -13,7 +13,7 @@ foreach my $dir_name (@dir_names){
 	while(my $data_file = $dir->next){
 	    my $old_name = $data_file->basename;
 	    my ($base, $suffix) = ( $old_name =~ /(.*)\.([^\.]*)$/ );
-	    if($suffix eq 'seq'){
+	    if( $suffix eq 'seq' || $suffix eq 'clipped'){
 	    	my $content = $data_file->slurp;
 	    	$content =~ s/^>\S*/> $base/g;
 
