@@ -56,7 +56,7 @@ foreach my $line (@samples_info){
         }
         if($file){
         	my $output_dir = "S$barcode"."_exp$exp_id";
-            my $crispresso_cmd = "$crispresso -w 30 --hide_mutations_outside_window_NHEJ --ignore_substitutions"
+            my $crispresso_cmd = "$crispresso -w 30 --hide_mutations_outside_window_NHEJ --ignore_substitutions --save_also_png"
                                  ." -o $output_dir"
                                  ." -r1 $file"
                                  ." -a $amplicon_start"
