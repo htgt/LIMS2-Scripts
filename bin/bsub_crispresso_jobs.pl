@@ -29,26 +29,31 @@ my $dir = dir($dir_name);
 my @files = $dir->children;
 my @samples_info = file($samples_file_name)->slurp(chomp => 1);
 foreach my $line (@samples_info){
-	my ($exp_id, $crispr_seq, $crispr_strand, $amplicon, $barcode_range) = split /\s*,\s*/, $line;
+	my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $barcode_range) = split /\s*,\s*/, $line;
     my ($start,$end) = split /\s*-\s*/, $barcode_range;
 
     # remove PAM, revcom if crispr site is on negative strand
     my $crispr_site;
-    if($crispr_strand eq "+"){
-    	$crispr_site = substr($crispr_seq,0,20);
-    }
-    elsif($crispr_strand eq "-"){
-    	$crispr_seq = reverse scalar $crispr_seq;
-    	$crispr_seq =~ tr/ATCG/TAGC/;
-    	$crispr_site = substr($crispr_seq,0,20);
-    }
+    #if($crispr_strand eq "+"){
+    $crispr_site = substr($crispr_seq,0,20);
+    #}
+    #elsif($crispr_strand eq "-"){
+    #	$crispr_seq = reverse scalar $crispr_seq;
+    #	$crispr_seq =~ tr/ATCG/TAGC/;
+    #	$crispr_site = substr($crispr_seq,0,20);
+    #}
 
     my $amplicon_start = substr($amplicon,0,150);
 
     my @barcodes = $start..$end;
     foreach my $barcode (@barcodes){
     	my $bc_in_name = "_S".$barcode."_";
-        my ($file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
+        my $file;
+        if($crispr_strand eq "-"){
+            ($file) = grep { $_=~ /$bc_in_name.*R2/ } @files;
+        } else {
+            ($file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
+        }
         if($file){
         	my $output_dir = "S$barcode"."_exp$exp_id";
             my $crispresso_cmd = "$crispresso -w 30 --hide_mutations_outside_window_NHEJ --ignore_substitutions"
@@ -57,7 +62,7 @@ foreach my $line (@samples_info){
                                  ." -a $amplicon_start"
                                  ." -g $crispr_site";
 
-            my $bsub_cmd = "bsub -q normal -G team87-grp -M500 -R\"select[mem>500] rusage[mem=500]\""
+            my $bsub_cmd = 'bsub -n1 -q normal -G team87-grp -M1000 -R"select[mem>1000] rusage[mem=1000] span[hosts=1]"'
                            ." -eo $output_dir/job.err"
                            ." -oo $output_dir/job.out"
                            ." $crispresso_cmd";
