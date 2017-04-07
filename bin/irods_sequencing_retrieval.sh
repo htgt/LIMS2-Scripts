@@ -1,3 +1,37 @@
-DATE=`date +%Y-%m-%dT%H:%M:%S`
-echo $DATE
-#jq -n '{avus: [{attribute: "study", value: "iPS MiSEQ Genotyping", o: "="}, {attribute: "target", value: "1", o: "="}], timestamps: [{"created": "2014-01-01T00:00:00", "operator": "n>="}]}' | /software/npg/20170228/bin/baton-metaquery --zone seq --obj  | jq -r '.[]' | /software/npg/20170228/bin/baton-get --save --verbose
+BASE=/lustre/scratch117/sciops/team87/MiSeq
+DIR="$BASE"/irods_holding_pen/
+cd $DIR
+HOUR=`date +%H`
+YEAR=`date +%Y` #Testing
+DATE=`date +$(($YEAR - 1))-%m-%dT$(($HOUR - 1)):%M:%S`
+
+jq -n '{avus: [{attribute: "study", value: "iPS MiSEQ Genotyping", o: "="}, {attribute: "target", value: "1", o: "="}], timestamps: [{"created": "'"$DATE"'", "operator": "n>="}]}' | /software/npg/20170228/bin/baton-metaquery --zone seq --obj | jq -r '.[]' | /software/npg/20170228/bin/baton-get --save --verbose
+
+echo "Files retrieved from irods"
+
+REGEX="\/([0-9]*)_([1-4])#([0-9]*)."
+for FILE in "$DIR"/*
+do
+    if [[ $FILE =~ $REGEX ]]
+    then
+        RUN="${BASH_REMATCH[1]}"
+        FOLDER="${BASE}/run_${RUN}"
+
+        if [ ! -d "$FOLDER" ]
+        then
+            cd $BASE
+            mkdir "run_${RUN}"
+            echo "Created"
+        fi
+        QUAD="${BASH_REMATCH[2]}"
+        WELL="${BASH_REMATCH[3]}"
+        INDEX=$((($QUAD - 1 ) * 96 + $WELL))
+        #mv $FILE "$FOLDER/"
+        echo "Converting $INDEX"
+
+        /software/solexa/pkg/biobambam/current/bin/bamtofastq inputformat=cram exclude=SECONDARY,SUPPLEMENTARY,QCFAIL I=$FILE F="$FOLDER/${INDEX}_S${INDEX}_L001_R1.fastq" F2="$FOLDER/${INDEX}_S${INDEX}_L001_R2.fastq"
+    fi
+done
+
+cd $DIR
+rm *
