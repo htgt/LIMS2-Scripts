@@ -1,0 +1,30 @@
+---
+primer_opt_size: 25
+primer_max_size: 28
+primer_min_size: 22
+# primer_min_size: 15
+primer_opt_gc_percent: 50
+# primer_max_gc: 60
+primer_max_gc: 75
+primer_min_gc: 40
+primer_opt_tm: 60
+primer_min_tm: 57
+primer_max_tm: 63
+# Make sure each end of the primer has a C or G (not A or T)
+primer_gc_clamp: 0
+# make primer pairs have different left / right primers, 3' end must be at least this far apart
+# primer_min_three_prime_distance: 0
+
+sequence_force_left_start: 3
+
+primer_num_return: 1
+# sequence_target: '30,800'
+primer_pick_left_primer: 1
+primer_pick_right_primer: 1
+# primer_pick_internal_oligo: 0
+# primer_max_ns_accepted: 1
+primer_product_size_range: '800-1100'
+primer_thermodynamic_parameters_path: '/nfs/team87/farm3_lims2_vms/software/primer3/src/primer3_config/'
+primer_explain_flag: 1
+primer_lowercase_masking: 1
+
