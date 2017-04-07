@@ -1,0 +1,2 @@
+gene_id,marker_symbol,ensembl_id,fail_reason,critical_exons
+HGNC:27057,A2M-AS1,ENSG00000245105,"No valid exons found",
