@@ -1,2 +1,0 @@
-gene_id,marker_symbol,assembly,build,species,ensembl_gene_id,ensembl_exon_id,exon_size,exon_rank,canonical_transcript,exon_start,exon_end,chr_name,chr_strand,ins_start,ins_end,ins_seq,insertion_site,split_exon_L,split_exon_R,fail_reason
-HGNC:7,A2M,GRCh38,79,Human,ENSG00000175899,ENSE00000897852,228,12,ENST00000318602,9101447,9101674,12,-1,9101611,9101614,GAGG,9101612,166,62,"No crisprs found overlapping insertion site"
