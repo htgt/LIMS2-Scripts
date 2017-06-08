@@ -85,6 +85,15 @@ sub file_handling {
     return \@lines;
 }
 
+sub frameshift_check {
+    my ($experiments, @common_read) = @_; 
+    my $fs_check = 0;
+    if ($common_read[1] eq 'True' ) {
+        $fs_check = ($common_read[4] + $common_read[5]) % 3;
+    }
+    return $fs_check;
+}
+
 my $rna_seq = $ENV{LIMS2_RNA_SEQ} || "/warehouse/team229_wh01/lims2_managed_miseq_data/";
 my $base = $rna_seq . $project . '/';
 my $experiments;
@@ -123,11 +132,19 @@ for (my $i = 1; $i < 385; $i++) {
 
         if ($read) {
             my @lines = @{file_handling($read)};
-            my @common_read = split(/,/, $lines[1]);
-            if ($common_read[1] eq 'True') {
-                my $fs_check = $common_read[4] % 3;
-                my $state;
+            my @mixed_read = split(/,/, $lines[3]);
+            my $mixed_check = $mixed_read[$#mixed_read];
+            if ($mixed_check >= 5) {
+                $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
+                $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Mixed';
+            } else {
+                my @first_most_common = split(/,/, $lines[1]); 
+                my @second_most_common = split(/,/, $lines[2]);
+               
+                my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
+                
                 if ($fs_check != 0) {
+                    $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
                     $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 1;
                 }
             }
@@ -216,7 +233,7 @@ if ($db_update) {
         }
         $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp })->as_hash;
         foreach my $well (keys %{$experiments->{$exp}}) {
-            if ($experiments->{$exp}->{$well}->{frameshifted}) {
+            if (defined $experiments->{$exp}->{$well}->{frameshifted}) {
                 my $well_rs = $model->schema->resultset('MiseqProjectWell')->find({ miseq_plate_id => $proj_rs->{id}, illumina_index => $well });
                 unless ($well_rs) {
                     my $remove_leading_zero = $well + 0;
@@ -243,7 +260,7 @@ if ($db_update) {
     foreach my $exp (keys %{$result}) {
         my $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp })->as_hash;
         foreach my $well (keys %{$experiments->{$exp}}) {
-            if ($experiments->{$exp}->{$well}->{frameshifted}) {
+            if (defined $experiments->{$exp}->{$well}->{frameshifted}) {
                 my $well_rs = $model->schema->resultset('MiseqProjectWell')->find({ miseq_plate_id => $proj_rs->{id}, illumina_index => $well })->as_hash;
                 my $well_exp = $model->schema->resultset('MiseqProjectWellExp')->find({ miseq_well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
                 if ($well_exp) {
@@ -253,6 +270,7 @@ if ($db_update) {
                         try {
                             $model->update_miseq_well_experiment({
                                 id              => $well_exp->{id},
+                                classification  => $well_exp->{classification} || $experiments->{$exp}->{$well}->{classification},
                                 frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
                             });
                             print "Updated Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . "\n";
@@ -267,7 +285,7 @@ if ($db_update) {
                             $model->create_miseq_well_experiment({
                                 miseq_well_id   => $well_rs->{id},
                                 miseq_exp_id    => $exp_check->{id},
-                                classification  => 'Not Called',
+                                classification  => $experiments->{$exp}->{$well}->{classification},
                                 frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
                             });
                             $well_exp = $model->schema->resultset('MiseqProjectWellExp')->find({ miseq_well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} })->as_hash;

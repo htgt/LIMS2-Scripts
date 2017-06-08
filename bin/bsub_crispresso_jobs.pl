@@ -29,7 +29,7 @@ my $dir = dir($dir_name);
 my @files = $dir->children;
 my @samples_info = file($samples_file_name)->slurp(chomp => 1);
 foreach my $line (@samples_info){
-	my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $barcode_range) = split /\s*,\s*/, $line;
+	my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $barcode_range, $hdr) = split /\s*,\s*/, $line;
     my ($start,$end) = split /\s*-\s*/, $barcode_range;
 
     # remove PAM, revcom if crispr site is on negative strand
@@ -43,26 +43,29 @@ foreach my $line (@samples_info){
     #	$crispr_site = substr($crispr_seq,0,20);
     #}
 
-    my $amplicon_start = substr($amplicon,0,150);
+    #my $amplicon_start = substr($amplicon,0,150);
 
     my @barcodes = $start..$end;
     foreach my $barcode (@barcodes){
     	my $bc_in_name = "_S".$barcode."_";
         my $file;
-        if($crispr_strand eq "-"){
-            ($file) = grep { $_=~ /$bc_in_name.*R2/ } @files;
-        } else {
+        my $sec_file;
+        # if($crispr_strand eq "-"){
+            ($sec_file) = grep { $_=~ /$bc_in_name.*R2/ } @files;
+            #} else {
             ($file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
-        }
+            #}
         if($file){
         	my $output_dir = "S$barcode"."_exp$exp_id";
-            my $crispresso_cmd = "$crispresso -w 30 --hide_mutations_outside_window_NHEJ --ignore_substitutions --save_also_png"
+            my $crispresso_cmd = "$crispresso -w 30 --hide_mutations_outside_window_NHEJ --ignore_substitutions --save_also_png --keep_intermediate "
                                  ." -o $output_dir"
-                                 ." -r1 $file"
-                                 ." -a $amplicon_start"
+                                 ." -r1 $sec_file"
+                                 #." -r2 $sec_file"
+                                 ." -a $amplicon"
                                  ." -g $crispr_site";
+                                 #." -e $hdr";
 
-            my $bsub_cmd = 'bsub -n1 -q normal -G team87-grp -M1000 -R"select[mem>1000] rusage[mem=1000] span[hosts=1]"'
+            my $bsub_cmd = 'bsub -n1 -q normal -G team87-grp -M2000 -R"select[mem>2000] rusage[mem=2000] span[hosts=1]"'
                            ." -eo $output_dir/job.err"
                            ." -oo $output_dir/job.out"
                            ." $crispresso_cmd";
