@@ -1,3 +1,0 @@
-gene_id,marker_symbol,ensembl_gene_id,ensembl_exon_id,exon_size,exon_rank,canonical_transcript,chr_name,chr_strand,ins_start,ins_end,ins_seq,assembly,build,species,fail_reason
-HGNC:24086,A1CF,ENSG00000148584,ENSE00003459832,165,9,ENST00000395489,10,-1,50828226,50828229,AAGA,GRCh38,79,Human,"No crisprs found overlapping insertion site"
-HGNC:24086,A1CF,ENSG00000148584,ENSE00003620759,239,8,ENST00000395489,10,-1,50836193,50836196,AAGG,GRCh38,79,Human,"No crisprs found overlapping insertion site"
