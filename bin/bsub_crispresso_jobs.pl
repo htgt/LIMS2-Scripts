@@ -17,53 +17,69 @@ my $crispresso = $ENV{CRISPRESSO_CMD} || "/nfs/team87/farm3_lims2_vms/software/p
 
 GetOptions(
     'samples=s' => \my $samples_file_name,
-    'dir=s'      => \my $dir_name,
+    'dir=s'     => \my $dir_name,
+    'offset=s'  => \my $offset,
+    'single'    => \my $single,
 );
 
 # Ouputs:
 # 1 directory per barcode/experiment combination
-# directory names in format S<barcode number> _expt<experiment ID>
+# directory names in format S<barcode number> _exp<experiment ID>
 
 # bsub -q normal -G team87-grp -eo S1_expA_farm/job.err -oo S1_expA_farm/job.out -M500 -R"select[mem>500] rusage[mem=500]" ./bin/CRISPResso -w 30 --hide_mutations_outside_window_NHEJ --ignore_substitutions -o S1_expA -r1 real_data/orig_fastq/Homo-sapiens_S1_L001_R1_001.fastq -a GAAAGTCCGGAAAGACAAGGAAGgaacacctccacttacaaaagaagataagacagttgtcagacaaagccctcgaaggattaagccagttaggattattccttcttcaaaaaggacagatgcaaccattgctaagcaactcttacagag -g CTCGAAGGATTAAGCCAGTT
+
+$offset = $offset || 0;
+
 my $dir = dir($dir_name);
 my @files = $dir->children;
 my @samples_info = file($samples_file_name)->slurp(chomp => 1);
-foreach my $line (@samples_info){
+foreach my $line (@samples_info) {
 	my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $barcode_range, $hdr) = split /\s*,\s*/, $line;
-    my ($start,$end) = split /\s*-\s*/, $barcode_range;
+    my @barcode_sets = split /\|/, $barcode_range;
+    my @barcodes;
 
-    # remove PAM, revcom if crispr site is on negative strand
-    my $crispr_site;
-    #if($crispr_strand eq "+"){
-    $crispr_site = substr($crispr_seq,0,20);
-    #}
-    #elsif($crispr_strand eq "-"){
-    #	$crispr_seq = reverse scalar $crispr_seq;
-    #	$crispr_seq =~ tr/ATCG/TAGC/;
-    #	$crispr_site = substr($crispr_seq,0,20);
-    #}
+    foreach my $set (@barcode_sets) {
+        my ($start,$end) = split /\s*-\s*/, $set;
+        push (@barcodes, $start..$end);
+    }
 
-    #my $amplicon_start = substr($amplicon,0,150);
+    my $crispr_site = substr($crispr_seq,0,20);
 
-    my @barcodes = $start..$end;
-    foreach my $barcode (@barcodes){
+    foreach my $barcode (@barcodes) {
     	my $bc_in_name = "_S".$barcode."_";
-        my $file;
-        my $sec_file;
-        # if($crispr_strand eq "-"){
-            ($sec_file) = grep { $_=~ /$bc_in_name.*R2/ } @files;
-            #} else {
-            ($file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
-            #}
-        if($file){
-        	my $output_dir = "S$barcode"."_exp$exp_id";
-            my $crispresso_cmd = "$crispresso -w 30 --hide_mutations_outside_window_NHEJ --ignore_substitutions --save_also_png --keep_intermediate "
-                                 ." -o $output_dir"
-                                 ." -r1 $sec_file"
-                                 #." -r2 $sec_file"
-                                 ." -a $amplicon"
-                                 ." -g $crispr_site";
-                                 #." -e $hdr";
+        my ($fwd_file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
+        my ($rev_file) = grep { $_=~ /$bc_in_name.*R2/ } @files;
+
+        my $fix = $barcode - $offset;
+        my $output_dir = "S$fix"."_exp$exp_id";
+
+        if ($fwd_file && $rev_file) {
+            my $crispresso_cmd;
+            if ($single) {
+                my $file;
+                if ($crispr_strand eq '-') {
+                    $file = $rev_file;
+                } else {
+                    $file = $fwd_file;
+                }
+
+                $crispresso_cmd = "$crispresso -w 50 --hide_mutations_outside_window_NHEJ --save_also_png "
+                     ." -o $output_dir"
+                     ." -r1 $file"
+                     ." -a $amplicon"
+                     ." -g $crispr_site";
+            } else {
+                $crispresso_cmd = "$crispresso -w 50 --hide_mutations_outside_window_NHEJ --save_also_png "
+                     ." -o $output_dir"
+                     ." -r1 $fwd_file"
+                     ." -r2 $rev_file"
+                     ." -a $amplicon"
+                     ." -g $crispr_site";
+            }
+
+            if ($hdr) {
+                $crispresso_cmd = $crispresso_cmd . " -e $hdr";
+            }
 
             my $bsub_cmd = 'bsub -n1 -q normal -G team87-grp -M2000 -R"select[mem>2000] rusage[mem=2000] span[hosts=1]"'
                            ." -eo $output_dir/job.err"
@@ -73,8 +89,7 @@ foreach my $line (@samples_info){
             say "Running command $bsub_cmd";
             my $cmd_output = `$bsub_cmd`;
             say "Command output: $cmd_output";
-        }
-        else{
+        } else {
         	say "No file found for barcode $barcode";
         }
     }

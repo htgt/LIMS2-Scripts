@@ -99,11 +99,11 @@ my $base = $rna_seq . $project . '/';
 my $experiments;
 
 for (my $i = 1; $i < 385; $i++) {
-    my $reg = "S" . $i . "_exp[A-Z]+";
+    my $reg = "S" . $i . "_exp[A-Za-z0-9_]+";
     my @files = find_children($base, $reg);
     my @exps;
     foreach my $file (@files) {
-        my @matches = ($file =~ /S\d+_exp([A-Z]+)/g);
+        my @matches = ($file =~ /S\d+_exp([A-Za-z0-9_]+)/g);
         foreach my $match (@matches) {
             push (@exps,$match);
         }
@@ -220,8 +220,8 @@ if ($db_update) {
                         miseq_id        => $proj_rs->{id},
                         name            => $exp,
                         gene            => (split(/_/,$ov->{$exp}[0]))[0],
-                        mutation_reads  => $result->{$exp}->{nhej},
-                        total_reads     => $result->{$exp}->{total},
+                        mutation_reads  => $result->{$exp}->{nhej} || 0,
+                        total_reads     => $result->{$exp}->{total} || 1,
                     });
                     print "Inserted Miseq ID: " . $proj_rs->{id} . " Experiment: " . $exp . "\n";
                 }
