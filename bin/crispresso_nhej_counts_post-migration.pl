@@ -94,6 +94,20 @@ sub frameshift_check {
     return $fs_check;
 }
 
+sub well_builder {
+    my ($mod, @well_names) = @_;
+    
+    foreach my $number (1..12) {
+        my $well_num = $number + $mod->{mod};
+        foreach my $letter ( @{$mod->{letters}} ) {
+            my $well = sprintf("%s%02d", $letter, $well_num);
+            push (@well_names, $well);
+        }
+    }
+
+    return @well_names;
+}
+
 my $rna_seq = $ENV{LIMS2_RNA_SEQ} || "/warehouse/team229_wh01/lims2_managed_miseq_data/";
 my $base = $rna_seq . $project . '/';
 my $experiments;
@@ -132,20 +146,22 @@ for (my $i = 1; $i < 385; $i++) {
 
         if ($read) {
             my @lines = @{file_handling($read)};
-            my @mixed_read = split(/,/, $lines[3]);
-            my $mixed_check = $mixed_read[$#mixed_read];
-            if ($mixed_check >= 5) {
-                $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
-                $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Mixed';
-            } else {
-                my @first_most_common = split(/,/, $lines[1]); 
-                my @second_most_common = split(/,/, $lines[2]);
-               
-                my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
-                
-                if ($fs_check != 0) {
-                    $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
-                    $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 1;
+            if (scalar @lines > 3) {
+                my @mixed_read = split(/,/, $lines[3]);
+                my $mixed_check = $mixed_read[$#mixed_read];
+                if ($mixed_check >= 5) {
+                    $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
+                    $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Mixed';
+                } else {
+                    my @first_most_common = split(/,/, $lines[1]); 
+                    my @second_most_common = split(/,/, $lines[2]);
+                   
+                    my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
+                    
+                    if ($fs_check != 0) {
+                        $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
+                        $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 1;
+                    }
                 }
             }
         }
@@ -205,11 +221,38 @@ if ($summary) { #One time use code
 if ($db_update) {
     #Update miseq_exp table
     my $model = LIMS2::Model->new({ user => 'tasks' });
-    my $proj_rs = $model->schema->resultset('MiseqProject')->find({ name => $project })->as_hash;
+
     my $csv = Text::CSV->new({ binary => 1 }) or die "Can't use CSV: " . Text::CSV->error_diag();
     open my $fh, '<:encoding(UTF-8)', $base . '/summary.csv' or die "Can't open CSV: $!";
     my $ov = read_columns($model, $csv, $fh);
     close $fh;
+
+    my $plate_rs = $model->schema->resultset('Plate')->find({ name => $project })->as_hash;
+    my $proj_rs = $model->schema->resultset('MiseqPlate')->find({ plate_id => $plate_rs->{id} })->as_hash;
+
+    my @well_names;
+    my $quads = {
+        '0' => {
+            mod     => 0,
+            letters => ['A','B','C','D','E','F','G','H'],
+        },
+        '1' => {
+            mod     => 12,
+            letters => ['A','B','C','D','E','F','G','H'],
+        },
+        '2' => {
+            mod     => 0,
+            letters => ['I','J','K','L','M','N','O','P'], 
+        },
+        '3' => {
+            mod     => 12,
+            letters => ['I','J','K','L','M','N','O','P'], 
+        }
+    };
+
+    for (my $ind = 0; $ind < 4; $ind++) {
+        @well_names = well_builder($quads->{$ind}, @well_names);
+    }
 
     foreach my $exp (keys %{$result}) {
         my $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
@@ -220,8 +263,8 @@ if ($db_update) {
                         miseq_id        => $proj_rs->{id},
                         name            => $exp,
                         gene            => (split(/_/,$ov->{$exp}[0]))[0],
-                        mutation_reads  => $result->{$exp}->{nhej} || 0,
-                        total_reads     => $result->{$exp}->{total} || 1,
+                        mutation_reads  => $result->{$exp}->{nhej} || '0',
+                        total_reads     => $result->{$exp}->{total} || '1',
                     });
                     print "Inserted Miseq ID: " . $proj_rs->{id} . " Experiment: " . $exp . "\n";
                 }
@@ -230,39 +273,16 @@ if ($db_update) {
                     $model->schema->txn_rollback;
                 };
             });
+            $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
         }
-        $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp })->as_hash;
+
+        $exp_check = $exp_check->as_hash;
         foreach my $well (keys %{$experiments->{$exp}}) {
             if (defined $experiments->{$exp}->{$well}->{frameshifted}) {
-                my $well_rs = $model->schema->resultset('MiseqProjectWell')->find({ miseq_plate_id => $proj_rs->{id}, illumina_index => $well });
-                unless ($well_rs) {
-                    my $remove_leading_zero = $well + 0;
-                    $model->schema->txn_do( sub {
-                        try {
-                            $model->create_miseq_plate_well({
-                                miseq_plate_id  => $proj_rs->{id},
-                                illumina_index  => $remove_leading_zero,
-                                status          => 'Plated',
-                            });
-                            $well_rs = $model->schema->resultset('MiseqProjectWell')->find({ miseq_plate_id => $proj_rs->{id}, illumina_index => $well });
-                            print "Created Miseq Well ID: " . $well_rs->as_hash->{id} . "\n";
-                        }
-                        catch {
-                            warn "Could not create well record for index " . $well . ": $_";
-                            $model->schema->txn_rollback;
-                        };
-                    });
-                }
-            }
-        }
-    }
-    #Couldn't find new records when combined with Well creation.
-    foreach my $exp (keys %{$result}) {
-        my $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp })->as_hash;
-        foreach my $well (keys %{$experiments->{$exp}}) {
-            if (defined $experiments->{$exp}->{$well}->{frameshifted}) {
-                my $well_rs = $model->schema->resultset('MiseqProjectWell')->find({ miseq_plate_id => $proj_rs->{id}, illumina_index => $well })->as_hash;
-                my $well_exp = $model->schema->resultset('MiseqProjectWellExp')->find({ miseq_well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
+                print "Attempt Well: " . $well . "\n";
+                my $well_rs = $model->schema->resultset('Well')->find({ plate_id => $plate_rs->{id}, name => $well_names[$well - 1] })->as_hash;
+                my $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
+
                 if ($well_exp) {
                     $well_exp = $well_exp->as_hash;
 
@@ -273,7 +293,7 @@ if ($db_update) {
                                 classification  => $well_exp->{classification} || $experiments->{$exp}->{$well}->{classification},
                                 frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
                             });
-                            print "Updated Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . "\n";
+                            print "Updated Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . " Well: " . $well . "\n";
                         }
                         catch {
                             warn "Could not update well record for " . $well_exp->{id} . ": $_";
@@ -283,12 +303,12 @@ if ($db_update) {
                     $model->schema->txn_do( sub {
                         try {
                             $model->create_miseq_well_experiment({
-                                miseq_well_id   => $well_rs->{id},
+                                well_id         => $well_rs->{id},
                                 miseq_exp_id    => $exp_check->{id},
                                 classification  => $experiments->{$exp}->{$well}->{classification},
                                 frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
                             });
-                            $well_exp = $model->schema->resultset('MiseqProjectWellExp')->find({ miseq_well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} })->as_hash;
+                            $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} })->as_hash;
                             print "Created Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . "\n";
                         }
                         catch {
