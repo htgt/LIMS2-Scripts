@@ -33,16 +33,23 @@ $offset = $offset || 0;
 my $dir = dir($dir_name);
 my @files = $dir->children;
 my @samples_info = file($samples_file_name)->slurp(chomp => 1);
-foreach my $line (@samples_info) {
+OUTER: foreach my $line (@samples_info) {
 	my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $barcode_range, $hdr) = split /\s*,\s*/, $line;
-    my @barcode_sets = split /\|/, $barcode_range;
+
+    if ($barcode_range eq 'Barcode Range') {next OUTER};
+
+    my @barcode_sets = split /\s*;\s*/, $barcode_range;
     my @barcodes;
-
-    foreach my $set (@barcode_sets) {
-        my ($start,$end) = split /\s*-\s*/, $set;
-        push (@barcodes, $start..$end);
+    
+    foreach my $wells (@barcode_sets) {
+        if ($wells =~ /\s*-\s*/){
+            my ($start,$end) = split /\s*-\s*/, $wells;
+            push (@barcodes, $start..$end);
+        } else {
+            push (@barcodes, $wells);
+        }
     }
-
+    
     my $crispr_site = substr($crispr_seq,0,20);
 
     foreach my $barcode (@barcodes) {
