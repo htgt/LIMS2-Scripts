@@ -183,6 +183,7 @@ foreach my $exp (keys %{$experiments}) {
         total   => $total,
         efficiency => $target,
     };
+    print "Experiment: " . $exp . ", NHEJ: " . $nhej . ", Total: " . $total . ", Eff: " . $target . "%\n";
 }
 
 if ($summary) { #One time use code
@@ -191,11 +192,10 @@ if ($summary) { #One time use code
     my $old_file = $base . 'summary.csv';
     my $new_file = $old_file . '.tmp';
 
-    open my $in, $old_file or die "$old_file: $!";
+    open my $in, "<:encoding(utf8)", $old_file or die "$old_file: $!";
     open my $out, '>', $new_file or die "$new_file: $!";
     
     my $header = $csv->getline($in);
-
     if (scalar @$header != 9) {
         splice @$header, 6, 0, "NHEJ";
         splice @$header, 7, 0, "Total";
@@ -280,7 +280,12 @@ if ($db_update) {
         foreach my $well (keys %{$experiments->{$exp}}) {
             if (defined $experiments->{$exp}->{$well}->{frameshifted}) {
                 print "Attempt Well: " . $well . "\n";
-                my $well_rs = $model->schema->resultset('Well')->find({ plate_id => $plate_rs->{id}, name => $well_names[$well - 1] })->as_hash;
+                my $well_rs = $model->schema->resultset('Well')->find({ plate_id => $plate_rs->{id}, name => $well_names[$well - 1] });
+                if ($well_rs) {
+                    $well_rs = $well_rs->as_hash;
+                } else {
+
+                }
                 my $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
 
                 if ($well_exp) {
