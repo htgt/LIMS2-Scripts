@@ -284,7 +284,8 @@ if ($db_update) {
                 if ($well_rs) {
                     $well_rs = $well_rs->as_hash;
                 } else {
-
+                    print "Plate: " . $plate_rs->{id} . ", Well: " . $well_names[$well - 1] . " - Failed to retrieve well";
+                    continue;
                 }
                 my $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
 
@@ -324,4 +325,5 @@ if ($db_update) {
             }
         }
     }
+    print "Finished.";
 }
