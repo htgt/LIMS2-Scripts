@@ -1,5 +1,4 @@
-#BASE=/lustre/scratch117/sciops/team87/MiSeq
-BASE=/lustre/scratch117/sciops/team87/Mark
+BASE=MiSeq
 DIR="$BASE"/irods_holding_pen/
 cd $DIR
 HOUR=`date +%H`

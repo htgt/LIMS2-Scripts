@@ -10,16 +10,23 @@ use Moose;
 use Data::Dumper;
 use Log::Log4perl qw( :easy );
 
-my ( $file, $persist, $dir );
+my ( $file, $persist, $dir, $design_type );
 GetOptions(
     'help'            => sub { pod2usage( -verbose => 1 ) },
     'man'             => sub { pod2usage( -verbose => 2 ) },
     'file=s'          => \$file,
+    'type=s'          => \$design_type,
     'debug'           => \my $debug,
 ) or pod2usage(2);
 
 die( 'Specify file with design info' ) unless $file;
-
+my $design_types = {
+    'conditional-inversion' => 1,
+    'miseq'                 => 1,
+};
+unless ($design_types->{$design_type}) {
+    die('Invalid design type');
+}
 has lims2_api => (
     is         => 'ro',
     isa        => 'LIMS2::REST::Client',
@@ -36,13 +43,13 @@ sub _build_lims2_api {
 my $lims = {
     lims2_api         => _build_lims2_api(),
     dir               => $dir,
-    design_method     => 'conditional-inversion',
+    design_method     => $design_type,
 };
 
 my $design_data = YAML::Any::LoadFile( $file );
 my $self = $lims->{lims2_api}->_build_ua();
 my $design = $lims->{lims2_api}->POST('design', $design_data );
-print ('Design persisted: ' . $design->{id} );
+print ('Design persisted: ' . $design->{id} . "\n");
 
 __END__
 
@@ -65,6 +72,7 @@ create-multiple-designs.pl - Create multiple designs
       --param           Specify additional param(s) not in file
       --dry-run         Just print out command that would be called, don't call it
       --param           Specify additional parameter(s) to send to design creation program
+      --type            Specify design type
 
 =head1 DESCRIPTION
 
