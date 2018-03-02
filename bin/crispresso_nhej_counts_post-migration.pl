@@ -88,8 +88,8 @@ sub file_handling {
 sub frameshift_check {
     my ($experiments, @common_read) = @_; 
     my $fs_check = 0;
-    if ($common_read[1] eq 'True' ) {
-        $fs_check = ($common_read[4] + $common_read[5]) % 3;
+    if ($common_read[2] eq 'True' ) {
+        $fs_check = ($common_read[5] + $common_read[6]) % 3;
     }
     return $fs_check;
 }
@@ -157,7 +157,6 @@ for (my $i = 1; $i < 385; $i++) {
                     my @second_most_common = split(/,/, $lines[2]);
                    
                     my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
-                    
                     if ($fs_check != 0) {
                         $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
                         $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 1;
@@ -185,7 +184,7 @@ foreach my $exp (keys %{$experiments}) {
     };
     print "Experiment: " . $exp . ", NHEJ: " . $nhej . ", Total: " . $total . ", Eff: " . $target . "%\n";
 }
-
+print Dumper $experiments;
 if ($summary) { #One time use code
     my $csv = Text::CSV->new({binary => 1, eol => "\n"}) or die "Cannot use CSV: ".Text::CSV->error_diag ();
 
@@ -285,7 +284,7 @@ if ($db_update) {
                     $well_rs = $well_rs->as_hash;
                 } else {
                     print "Plate: " . $plate_rs->{id} . ", Well: " . $well_names[$well - 1] . " - Failed to retrieve well";
-                    continue;
+                    next;
                 }
                 my $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
 
