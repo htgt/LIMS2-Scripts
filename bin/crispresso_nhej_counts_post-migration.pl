@@ -184,7 +184,7 @@ foreach my $exp (keys %{$experiments}) {
     };
     print "Experiment: " . $exp . ", NHEJ: " . $nhej . ", Total: " . $total . ", Eff: " . $target . "%\n";
 }
-print Dumper $experiments;
+
 if ($summary) { #One time use code
     my $csv = Text::CSV->new({binary => 1, eol => "\n"}) or die "Cannot use CSV: ".Text::CSV->error_diag ();
 

@@ -10,10 +10,22 @@ use Text::CSV;
 use Getopt::Long;
 use Bio::Seq;
 use Bio::SeqIO;
+=head
+
+Sample csv should look like this:
+
+Basespace Well Name (Optional), Well number, i7 reverse, i5 forward
+A01_3_95	                    193	        ATCACGTT	CCTATCCT
+B01_3_95	                    194	        CGATGTTT	CCTATCCT
+C01_3_95	                    195	        TTAGGCAT	CCTATCCT
+D01_3_95                    	196	        TGACCACT	CCTATCCT
+E01_3_95	                    197	        ACAGTGGT	CCTATCCT
+
+=cut 
 
 sub pick_tags {
-    my ($manifest, $tag, $seq, $tag_groups, $req, $read_number) = @_;
-    
+    my ($manifest, $tag, $seq, $tag_groups, $read_number) = @_;
+   
     my $well = $manifest->{$tag};
         
     if ($well) {
@@ -40,7 +52,6 @@ GetOptions(
     'samples=s' => \my $sample,
     'fastq=s'   => \my $fastq,
     'strand=s'  => \my $strand,
-    'tag=s'     => \my $req,
 );
 
 if ($strand ne 'fwd' && $strand ne 'rev') {
@@ -77,9 +88,9 @@ while (my $seq = $seqio->next_seq) {
         my @tags = split (/\+/, $comb_tag);
 
         if ($strand eq 'fwd') {
-            $tag_groups = pick_tags($manifest->{$tags[1]}, $tags[0], $seq, $tag_groups, $req, $read_number);
+            $tag_groups = pick_tags($manifest->{$tags[1]}, $tags[0], $seq, $tag_groups, $read_number);
         } else {
-            $tag_groups = pick_tags($manifest->{$tags[0]}, $tags[1], $seq, $tag_groups, $req, $read_number);
+            $tag_groups = pick_tags($manifest->{$tags[0]}, $tags[1], $seq, $tag_groups, $read_number);
         }
     }
     $read_number++;

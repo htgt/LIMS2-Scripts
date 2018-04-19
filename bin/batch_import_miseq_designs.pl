@@ -220,9 +220,13 @@ my $ots_server = WGE::Util::OffTargetServer->new;
 
 #Build data hash
 foreach my $exp (keys %$data) {
-    my @wge_crispr_arr = [$data->{$exp}->{wge_id}];
-    my @crispr_arr = $lims2_model->import_wge_crisprs(\@wge_crispr_arr, 'Human', 'GRCh38');
-    my $crispr_hash = $crispr_arr[0]->{db_crispr}->as_hash;
+    my $crispr_hash = $lims2_model->schema->resultset('Crispr')->find({ wge_crispr_id => $data->{$exp}->{wge_id} });
+    unless ($crispr_hash) {
+        my @wge_crispr_arr = [$data->{$exp}->{wge_id}];
+        my @crispr_arr = $lims2_model->import_wge_crisprs(\@wge_crispr_arr, 'Human', 'GRCh38');
+        $crispr_hash = $crispr_arr[0]->{db_crispr};
+    }
+    $crispr_hash = $crispr_hash->as_hash;
     $data->{$exp}->{lims_crispr} = $crispr_hash->{id};
     $data->{$exp}->{loci} = {
         assembly    => 'GRCh38',
