@@ -5,6 +5,7 @@ use warnings;
 use feature qw/ say /;
 use Path::Class;
 use Getopt::Long;
+use Text::CSV;
 
 # Inputs:
 #   samples: csv file containing 6 columns: Experiment ID, crispr seq, crispr strand, amplicon seq, minimum index and maximum index
@@ -30,49 +31,71 @@ GetOptions(
 
 $offset = $offset || 0;
 
+my $csv = Text::CSV->new({ binary => 1 }) or die "Can't use CSV: " . Text::CSV->error_diag();
+open my $fh, '<:encoding(UTF-8)', $samples_file_name or die "Can't open CSV: $!";
+
 my $dir = dir($dir_name);
 my @files = $dir->children;
-my @samples_info = file($samples_file_name)->slurp(chomp => 1);
-OUTER: foreach my $line (@samples_info) {
-    my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $start, $end, $hdr) = split /\s*,\s*/, $line;
-    my @barcodes;
-    push (@barcodes, $start..$end);
+my @barcodes;
 
-    my $crispr_site = substr($crispr_seq,0,20);
-	    foreach my $barcode (@barcodes) {
-    	my $bc_in_name = "_S".$barcode."_";
-        my ($fwd_file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
-        my ($rev_file) = grep { $_=~ /$bc_in_name.*R2/ } @files;
+$csv->column_names($csv->getline($fh));
 
-        my $fix = $barcode - $offset;
-        my $output_dir = "S$fix"."_exp$exp_id";
+while (my $hr = $csv->getline_hr($fh)){
+    $hr = { map lc, %$hr };
+    if (exists $hr->{range}){
+        my @barcode_sets = split /\s*;\s*/, $hr->{range};
+        foreach my $wells (@barcode_sets) {
+            if ($wells =~ /\s*-\s*/){
+                my ($start,$end) = split /\s*-\s*/, $wells;
+                push (@barcodes, $start..$end);
+            }else {
+                push (@barcodes, $wells);
+            }
+        }
+    }
+    elsif (exists $hr->{min} && $hr->{max}){
+        push (@barcodes, $hr->{min}..$hr->{max});
+    }
+    else{
+        warn "Range is not provided in any of the expected formats.";
+        die;
+    }
+    
+    my $crispr_site = substr($hr->{crispr},0,20);
+	foreach my $barcode (@barcodes) {
+	my $bc_in_name = "_S".$barcode."_";
+    my ($fwd_file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
+    my ($rev_file) = grep { $_=~ /$bc_in_name.*R2/ } @files;
 
-        if ($fwd_file && $rev_file) {
-            my $crispresso_cmd;
-            if ($single) {
-                my $file;
-                if ($crispr_strand eq '-') {
-                    $file = $rev_file;
-                } else {
-                    $file = $fwd_file;
-                }
+    my $fix = $barcode - $offset;
+    my $output_dir = "S$fix"."_exp$hr->{experiment}";
+    if ($fwd_file && $rev_file) {
+        my $crispresso_cmd;
+        if ($single) {
+            my $file;
+            if ($hr->{strand} eq '-') {                   
+                $file = $rev_file;
+            } 
+            else {
+                $file = $fwd_file;
+            }
 
                 $crispresso_cmd = "$crispresso -w 50 --hide_mutations_outside_window_NHEJ --save_also_png "
                      ." -o $output_dir"
                      ." -r1 $file"
-                     ." -a $amplicon"
+                     ." -a $hr->{amplicon}"
                      ." -g $crispr_site";
             } else {
                 $crispresso_cmd = "$crispresso -w 50 --hide_mutations_outside_window_NHEJ --save_also_png "
                      ." -o $output_dir"
                      ." -r1 $fwd_file"
                      ." -r2 $rev_file"
-                     ." -a $amplicon"
+                     ." -a $hr->{amplicon}"
                      ." -g $crispr_site";
             }
 
-            if ($hdr) {
-                $crispresso_cmd = $crispresso_cmd . " -e $hdr";
+            if ($hr->{hdr}) {
+                $crispresso_cmd = $crispresso_cmd . " -e $hr->{hdr}";
             }
 
             my $bsub_cmd = 'bsub -n1 -q normal -G team87-grp -M2000 -R"select[mem>2000] rusage[mem=2000] span[hosts=1]"'
