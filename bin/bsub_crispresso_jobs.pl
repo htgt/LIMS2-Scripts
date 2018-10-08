@@ -7,7 +7,7 @@ use Path::Class;
 use Getopt::Long;
 
 # Inputs:
-#   samples: csv file containing 5 columns: Experiment ID, crispr seq, crispr strand, amplicon seq, barcode range
+#   samples: csv file containing 6 columns: Experiment ID, crispr seq, crispr strand, amplicon seq, minimum index and maximum index
 #   dir    : directory containing input fastq files (1 per barcode with names containing _S<barcode number>_ and R1 or R2)
 
 # NB: Experiment ID is just a unique identifier for the combination of amplicon and crispr used.
@@ -34,25 +34,12 @@ my $dir = dir($dir_name);
 my @files = $dir->children;
 my @samples_info = file($samples_file_name)->slurp(chomp => 1);
 OUTER: foreach my $line (@samples_info) {
-	my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $barcode_range, $hdr) = split /\s*,\s*/, $line;
-
-    if ($barcode_range eq 'Barcode Range') {next OUTER};
-
-    my @barcode_sets = split /\s*;\s*/, $barcode_range;
+    my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $start, $end, $hdr) = split /\s*,\s*/, $line;
     my @barcodes;
-    
-    foreach my $wells (@barcode_sets) {
-        if ($wells =~ /\s*-\s*/){
-            my ($start,$end) = split /\s*-\s*/, $wells;
-            push (@barcodes, $start..$end);
-        } else {
-            push (@barcodes, $wells);
-        }
-    }
-    
-    my $crispr_site = substr($crispr_seq,0,20);
+    push (@barcodes, $start..$end);
 
-    foreach my $barcode (@barcodes) {
+    my $crispr_site = substr($crispr_seq,0,20);
+	    foreach my $barcode (@barcodes) {
     	my $bc_in_name = "_S".$barcode."_";
         my ($fwd_file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
         my ($rev_file) = grep { $_=~ /$bc_in_name.*R2/ } @files;
