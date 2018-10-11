@@ -67,8 +67,8 @@ sub read_columns {
     while ( my $row = $csv->getline($fh)) {
         next if $. < 2;
         my @genes;
-        push @genes, $row->[1];
-        $overview->{$row->[0]} = \@genes;
+        push @genes, ($row->[1]);
+        $overview->{($row->[0])} = \@genes;
     }
 
     return $overview;
@@ -107,6 +107,7 @@ sub well_builder {
 
     return @well_names;
 }
+
 
 my $rna_seq = $ENV{LIMS2_RNA_SEQ} || "/warehouse/team229_wh01/lims2_managed_miseq_data/";
 my $base = $rna_seq . $project . '/';
@@ -169,6 +170,7 @@ for (my $i = 1; $i < 385; $i++) {
 
 my $result;
 
+$DB::single=1;
 foreach my $exp (keys %{$experiments}) {
     my $nhej = 0;
     my $total = 0;
@@ -184,10 +186,8 @@ foreach my $exp (keys %{$experiments}) {
     };
     print "Experiment: " . $exp . ", NHEJ: " . $nhej . ", Total: " . $total . ", Eff: " . $target . "%\n";
 }
-
 if ($summary) { #One time use code
     my $csv = Text::CSV->new({binary => 1, eol => "\n"}) or die "Cannot use CSV: ".Text::CSV->error_diag ();
-
     my $old_file = $base . 'summary.csv';
     my $new_file = $old_file . '.tmp';
 
@@ -195,13 +195,14 @@ if ($summary) { #One time use code
     open my $out, '>', $new_file or die "$new_file: $!";
     
     my $header = $csv->getline($in);
-    if (scalar @$header != 9) {
-        splice @$header, 6, 0, "NHEJ";
-        splice @$header, 7, 0, "Total";
+    my $column_number = scalar(@$header);
+    if ($column_number <= 9) {
+        splice @$header, ($column_number-1) , 0, "NHEJ";
+        splice @$header, $column_number, 0, "Total";
         $csv->print($out, $header);
-        while (my $row = $csv->getline($in)) {
-            splice @$row, 6, 0, $result->{@$row[0]}->{nhej};
-            splice @$row, 7, 0, $result->{@$row[0]}->{total};
+        while (my $row = $csv->getline($in)) { 
+            splice @$row, ($column_number-1), 0, $result->{(@$row[0])}->{nhej};
+            splice @$row, $column_number, 0, $result->{(@$row[0])}->{total};
             $csv->print($out, $row);
         }
     } else {
@@ -274,7 +275,6 @@ if ($db_update) {
             });
             $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
         }
-
         $exp_check = $exp_check->as_hash;
         foreach my $well (keys %{$experiments->{$exp}}) {
             if (defined $experiments->{$exp}->{$well}->{frameshifted}) {

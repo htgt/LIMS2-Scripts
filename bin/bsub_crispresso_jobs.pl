@@ -38,10 +38,14 @@ my $dir = dir($dir_name);
 my @files = $dir->children;
 my @barcodes;
 
-$csv->column_names($csv->getline($fh));
-
+$csv->column_names(($csv->getline($fh)));
 while (my $hr = $csv->getline_hr($fh)){
-    $hr = { map lc, %$hr };
+    foreach my $key( keys %{ $hr } ){
+        if ($key ne lc $key){
+            $hr->{lc $key} = $hr->{$key};
+            delete $hr->{$key};
+        }
+    }
     if (exists $hr->{range}){
         my @barcode_sets = split /\s*;\s*/, $hr->{range};
         foreach my $wells (@barcode_sets) {
@@ -63,6 +67,7 @@ while (my $hr = $csv->getline_hr($fh)){
     
     my $crispr_site = substr($hr->{crispr},0,20);
 	foreach my $barcode (@barcodes) {
+
 	my $bc_in_name = "_S".$barcode."_";
     my ($fwd_file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
     my ($rev_file) = grep { $_=~ /$bc_in_name.*R2/ } @files;

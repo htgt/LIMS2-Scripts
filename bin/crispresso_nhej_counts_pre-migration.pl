@@ -168,25 +168,26 @@ foreach my $exp (keys %{$experiments}) {
         efficiency => $target,
     };
 }
-
 if ($summary) { #One time use code
     my $csv = Text::CSV->new({binary => 1, eol => "\n"}) or die "Cannot use CSV: ".Text::CSV->error_diag ();
 
     my $old_file = $base . 'summary.csv';
     my $new_file = $old_file . '.tmp';
 
-    open my $in, $old_file or die "$old_file: $!";
+    open my $in, "<:encoding(utf8)", $old_file or die "$old_file: $!";
     open my $out, '>', $new_file or die "$new_file: $!";
     
     my $header = $csv->getline($in);
+    my @headcount = split(/\s+/, $header);
+    my $column_number = scalar(@headcount);
 
-    if (scalar @$header != 9) {
-        splice @$header, 6, 0, "NHEJ";
-        splice @$header, 7, 0, "Total";
+    if ($headcount[-1] != ["Total"]) {
+        splice @$header, $column_number, 0, "NHEJ";
+        splice @$header, ($column_number+1), 0, "Total";
         $csv->print($out, $header);
         while (my $row = $csv->getline($in)) {
-            splice @$row, 6, 0, $result->{@$row[0]}->{nhej};
-            splice @$row, 7, 0, $result->{@$row[0]}->{total};
+            splice @$row, $column_number, 0, $result->{@$row[0]}->{nhej};
+            splice @$row, ($column_number+1)), 0, $result->{@$row[0]}->{total};
             $csv->print($out, $row);
         }
     } else {
