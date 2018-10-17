@@ -5,7 +5,6 @@ use warnings;
 
 use feature qw(say);
 use Getopt::Long;
-use Data::Dumper;
 use File::Find;
 use File::Copy qw(move);
 use Text::CSV;
@@ -170,7 +169,6 @@ for (my $i = 1; $i < 385; $i++) {
 
 my $result;
 
-$DB::single=1;
 foreach my $exp (keys %{$experiments}) {
     my $nhej = 0;
     my $total = 0;
