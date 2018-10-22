@@ -80,12 +80,11 @@ sub file_handling {
     open ($fh, '<:encoding(UTF-8)', $file_name) or die "$!";
     my @lines = read_file_lines($fh);
     close $fh;
-    
     return \@lines;
 }
 
 sub frameshift_check {
-    my ($experiments, @common_read) = @_; 
+    my ($experiments, @common_read) = @_;
     my $fs_check = 0;
     if ($common_read[2] eq 'True' ) {
         $fs_check = ($common_read[5] + $common_read[6]) % 3;
@@ -95,7 +94,7 @@ sub frameshift_check {
 
 sub well_builder {
     my ($mod, @well_names) = @_;
-    
+
     foreach my $number (1..12) {
         my $well_num = $number + $mod->{mod};
         foreach my $letter ( @{$mod->{letters}} ) {
@@ -122,12 +121,7 @@ for (my $i = 1; $i < 385; $i++) {
             push (@exps,$match);
         }
     }
-
     @exps = sort @exps;
-    my @selection;
-    my $percentages;
-    my $classes;
-
     foreach my $exp (@exps) {
         my $quant = find_file($base, $i, $exp, "Quantification_of_editing_frequency.txt");
 
@@ -153,9 +147,8 @@ for (my $i = 1; $i < 385; $i++) {
                     $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
                     $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Mixed';
                 } else {
-                    my @first_most_common = split(/,/, $lines[1]); 
+                    my @first_most_common = split(/,/, $lines[1]);
                     my @second_most_common = split(/,/, $lines[2]);
-                   
                     my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
                     if ($fs_check != 0) {
                         $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
@@ -191,16 +184,16 @@ if ($summary) { #One time use code
 
     open my $in, "<:encoding(utf8)", $old_file or die "$old_file: $!";
     open my $out, '>', $new_file or die "$new_file: $!";
-    
+
     my $header = $csv->getline($in);
     my $column_number = scalar(@$header);
-    if ($column_number <= 9) {
-        splice @$header, ($column_number-1) , 0, "NHEJ";
-        splice @$header, $column_number, 0, "Total";
+    unless ( grep( m/NHEJ/gmi, @$header)) {
+        splice @$header, $column_number , 0, "NHEJ";
+        splice @$header, ($column_number+1), 0, "Total";
         $csv->print($out, $header);
-        while (my $row = $csv->getline($in)) { 
-            splice @$row, ($column_number-1), 0, $result->{(@$row[0])}->{nhej};
-            splice @$row, $column_number, 0, $result->{(@$row[0])}->{total};
+        while (my $row = $csv->getline($in)) {
+            splice @$row, $column_number, 0, $result->{(@$row[0])}->{nhej};
+            splice @$row, ($column_number+1), 0, $result->{(@$row[0])}->{total};
             $csv->print($out, $row);
         }
     } else {
@@ -240,11 +233,11 @@ if ($db_update) {
         },
         '2' => {
             mod     => 0,
-            letters => ['I','J','K','L','M','N','O','P'], 
+            letters => ['I','J','K','L','M','N','O','P'],
         },
         '3' => {
             mod     => 12,
-            letters => ['I','J','K','L','M','N','O','P'], 
+            letters => ['I','J','K','L','M','N','O','P'],
         }
     };
 

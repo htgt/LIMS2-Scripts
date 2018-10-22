@@ -72,7 +72,6 @@ while (my $hr = $csv->getline_hr($fh)){
         warn "Range is not provided in any of the expected formats.";
         die;
     }
-    $DB::single=1; 
     my $crispr_site = substr($hr->{crispr},0,20);
 	foreach my $barcode (@barcodes) {
 
@@ -86,9 +85,9 @@ while (my $hr = $csv->getline_hr($fh)){
             my $crispresso_cmd;
             if ($single) {
                 my $file;
-                if ($hr->{strand} eq '-') {                   
+                if ($hr->{strand} eq '-') {
                     $file = $rev_file;
-                } 
+                }
                 else {
                     $file = $fwd_file;
                 }
