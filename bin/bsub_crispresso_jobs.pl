@@ -40,20 +40,14 @@ my @barcodes;
 
 my @col = $csv->column_names($csv->getline($fh));
 if ($col[5] =~  m/^min/gmi){
-    my @heads = qw(experiment gene crispr strand amplicon min_index max_index nhej total hdr);
+    my @heads = qw(experiment gene crispr strand amplicon min_index max_index hdr);
     $csv->column_names(\@heads);
 } else{
-    my @heads = qw(experiment gene crispr strand amplicon range nhej total hdr);
+    my @heads = qw(experiment gene crispr strand amplicon range hdr);
     $csv->column_names(\@heads);
 }
 
 while (my $hr = $csv->getline_hr($fh)){
-    foreach my $key( keys %{ $hr } ){
-        if ($key ne lc $key){
-            $hr->{lc $key} = $hr->{$key};
-            delete $hr->{$key};
-        }
-    }
     if (exists $hr->{range}){
         my @barcode_sets = split /\s*;\s*/, $hr->{range};
         foreach my $wells (@barcode_sets) {
