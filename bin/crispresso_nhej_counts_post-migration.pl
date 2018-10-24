@@ -5,7 +5,6 @@ use warnings;
 
 use feature qw(say);
 use Getopt::Long;
-use Data::Dumper;
 use File::Find;
 use File::Copy qw(move);
 use Text::CSV;
@@ -67,8 +66,8 @@ sub read_columns {
     while ( my $row = $csv->getline($fh)) {
         next if $. < 2;
         my @genes;
-        push @genes, $row->[1];
-        $overview->{$row->[0]} = \@genes;
+        push @genes, ($row->[1]);
+        $overview->{($row->[0])} = \@genes;
     }
 
     return $overview;
@@ -81,12 +80,11 @@ sub file_handling {
     open ($fh, '<:encoding(UTF-8)', $file_name) or die "$!";
     my @lines = read_file_lines($fh);
     close $fh;
-    
     return \@lines;
 }
 
 sub frameshift_check {
-    my ($experiments, @common_read) = @_; 
+    my ($experiments, @common_read) = @_;
     my $fs_check = 0;
     if ($common_read[2] eq 'True' ) {
         $fs_check = ($common_read[5] + $common_read[6]) % 3;
@@ -96,7 +94,7 @@ sub frameshift_check {
 
 sub well_builder {
     my ($mod, @well_names) = @_;
-    
+
     foreach my $number (1..12) {
         my $well_num = $number + $mod->{mod};
         foreach my $letter ( @{$mod->{letters}} ) {
@@ -107,6 +105,7 @@ sub well_builder {
 
     return @well_names;
 }
+
 
 my $rna_seq = $ENV{LIMS2_RNA_SEQ} || "/warehouse/team229_wh01/lims2_managed_miseq_data/";
 my $base = $rna_seq . $project . '/';
@@ -122,12 +121,7 @@ for (my $i = 1; $i < 385; $i++) {
             push (@exps,$match);
         }
     }
-
     @exps = sort @exps;
-    my @selection;
-    my $percentages;
-    my $classes;
-
     foreach my $exp (@exps) {
         my $quant = find_file($base, $i, $exp, "Quantification_of_editing_frequency.txt");
 
@@ -153,9 +147,8 @@ for (my $i = 1; $i < 385; $i++) {
                     $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
                     $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Mixed';
                 } else {
-                    my @first_most_common = split(/,/, $lines[1]); 
+                    my @first_most_common = split(/,/, $lines[1]);
                     my @second_most_common = split(/,/, $lines[2]);
-                   
                     my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
                     if ($fs_check != 0) {
                         $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
@@ -184,24 +177,23 @@ foreach my $exp (keys %{$experiments}) {
     };
     print "Experiment: " . $exp . ", NHEJ: " . $nhej . ", Total: " . $total . ", Eff: " . $target . "%\n";
 }
-
 if ($summary) { #One time use code
     my $csv = Text::CSV->new({binary => 1, eol => "\n"}) or die "Cannot use CSV: ".Text::CSV->error_diag ();
-
     my $old_file = $base . 'summary.csv';
     my $new_file = $old_file . '.tmp';
 
     open my $in, "<:encoding(utf8)", $old_file or die "$old_file: $!";
     open my $out, '>', $new_file or die "$new_file: $!";
-    
+
     my $header = $csv->getline($in);
-    if (scalar @$header != 9) {
-        splice @$header, 6, 0, "NHEJ";
-        splice @$header, 7, 0, "Total";
+    my $column_number = scalar(@$header);
+    unless ( grep( m/NHEJ/gmi, @$header)) {
+        splice @$header, $column_number , 0, "NHEJ";
+        splice @$header, ($column_number+1), 0, "Total";
         $csv->print($out, $header);
         while (my $row = $csv->getline($in)) {
-            splice @$row, 6, 0, $result->{@$row[0]}->{nhej};
-            splice @$row, 7, 0, $result->{@$row[0]}->{total};
+            splice @$row, $column_number, 0, $result->{(@$row[0])}->{nhej};
+            splice @$row, ($column_number+1), 0, $result->{(@$row[0])}->{total};
             $csv->print($out, $row);
         }
     } else {
@@ -241,11 +233,11 @@ if ($db_update) {
         },
         '2' => {
             mod     => 0,
-            letters => ['I','J','K','L','M','N','O','P'], 
+            letters => ['I','J','K','L','M','N','O','P'],
         },
         '3' => {
             mod     => 12,
-            letters => ['I','J','K','L','M','N','O','P'], 
+            letters => ['I','J','K','L','M','N','O','P'],
         }
     };
 
@@ -274,7 +266,6 @@ if ($db_update) {
             });
             $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
         }
-
         $exp_check = $exp_check->as_hash;
         foreach my $well (keys %{$experiments->{$exp}}) {
             if (defined $experiments->{$exp}->{$well}->{frameshifted}) {
