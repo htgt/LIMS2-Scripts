@@ -66,8 +66,10 @@ while (my $hr = $csv->getline_hr($fh)){
         warn "Range is not provided in any of the expected formats.";
         die;
     }
-    my $crispr_site = substr($hr->{crispr},0,20);
-	foreach my $barcode (@barcodes) {
+
+    #my $crispr_site = substr($hr->{crispr},0,20);
+	my $crispr_site = $hr->{crispr};
+    foreach my $barcode (@barcodes) {
 
 	    my $bc_in_name = "_S".$barcode."_";
         my ($fwd_file) = grep { $_=~ /$bc_in_name.*R1/ } @files;
