@@ -84,12 +84,12 @@ sub file_handling {
     open ($fh, '<:encoding(UTF-8)', $file_name) or die "$!";
     my @lines = read_file_lines($fh);
     close $fh;
-    
+
     return \@lines;
 }
 
 sub frameshift_check {
-    my ($experiments, @common_read) = @_; 
+    my ($experiments, @common_read) = @_;
     my $fs_check = 0;
     if ($common_read[2] eq 'True' ) {
         $fs_check = ($common_read[5] + $common_read[6]) % 3;
@@ -99,7 +99,7 @@ sub frameshift_check {
 
 sub well_builder {
     my ($mod, @well_names) = @_;
-    
+
     foreach my $number (1..12) {
         my $well_num = $number + $mod->{mod};
         foreach my $letter ( @{$mod->{letters}} ) {
@@ -137,7 +137,6 @@ sub header_hash {
 my $rna_seq = $ENV{LIMS2_RNA_SEQ} || "/warehouse/team229_wh01/lims2_managed_miseq_data/";
 my $base = $rna_seq . $project . '/';
 my $experiments;
-my @paths;
 
 for (my $i = 1; $i < 385; $i++) {
     my $reg = "S" . $i . "_exp[A-Za-z0-9_]+";
@@ -151,9 +150,6 @@ for (my $i = 1; $i < 385; $i++) {
     }
 
     @exps = sort @exps;
-    my @selection;
-    my $percentages;
-    my $classes;
 
     foreach my $exp (@exps) {
         my $quant = find_file($base, $i, $exp, "Quantification_of_editing_frequency.txt");
@@ -162,7 +158,7 @@ for (my $i = 1; $i < 385; $i++) {
             open ($fh, '<:encoding(UTF-8)', $quant) or die "$!";
             chomp(my @lines  = <$fh>);
             close $fh;
- 
+
             my %params;
             my %commands = (
                 'NHEJ'           => 'nhej_reads',
@@ -182,7 +178,7 @@ for (my $i = 1; $i < 385; $i++) {
                 }
 
             }
-            
+
 
             $experiments->{$exp}->{sprintf("%02d", $i)} = {
                         nhej_reads      => $params{nhej_reads},
@@ -208,9 +204,9 @@ for (my $i = 1; $i < 385; $i++) {
                     $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
                     $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Mixed';
                 } else {
-                    my @first_most_common = split(/\t/, $lines[1]); 
+                    my @first_most_common = split(/\t/, $lines[1]);
                     my @second_most_common = split(/\t/, $lines[2]);
-                   
+
                     my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
                     if ($fs_check != 0) {
                         $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
@@ -218,7 +214,7 @@ for (my $i = 1; $i < 385; $i++) {
                     }
                 }
             }
-            
+
             my $histo_path = find_file($base, $i, $exp, "indel_histogram.txt");
             my %histogram;
             if ($histo_path) {
@@ -291,7 +287,7 @@ foreach my $exp (keys %{$experiments}) {
     foreach my $index (keys %{$experiments->{$exp}}) {
         my $nhej_well = $experiments->{$exp}->{$index}->{nhej_reads} || 0;
         my $total_well = $experiments->{$exp}->{$index}->{total_reads} || 0;
-        $nhej += $nhej_well; 
+        $nhej += $nhej_well;
         $total += $total_well;
     }
     unless ($total) {
@@ -314,7 +310,7 @@ if ($summary) { #One time use code
 
     open my $in, "<:encoding(utf8)", $old_file or die "$old_file: $!";
     open my $out, '>', $new_file or die "$new_file: $!";
-    
+
     my $header = $csv->getline($in);
     if (scalar @$header != 9) {
         splice @$header, 6, 0, "NHEJ";
@@ -363,18 +359,18 @@ if ($db_update) {
         },
         '2' => {
             mod     => 0,
-            letters => ['I','J','K','L','M','N','O','P'], 
+            letters => ['I','J','K','L','M','N','O','P'],
         },
         '3' => {
             mod     => 12,
-            letters => ['I','J','K','L','M','N','O','P'], 
+            letters => ['I','J','K','L','M','N','O','P'],
         }
     };
 
     for (my $ind = 0; $ind < 4; $ind++) {
         @well_names = well_builder($quads->{$ind}, @well_names);
     }
-    
+
     foreach my $exp (keys %{$result}) {
         my $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
         unless ($exp_check) {
@@ -402,9 +398,9 @@ if ($db_update) {
 
         for (my $well = 1; $well < 385; $well++) {
             my $well_rs = $model->schema->resultset('Well')->find({ plate_id => $plate_rs->{id}, name => $well_names[$well - 1] });
-            if ($well_rs) { 
+            if ($well_rs) {
                 $well_rs = $well_rs->as_hash;
-            } 
+            }
             else {
                 print "Plate: " . $plate_rs->{id} . ", Well: " . $well_names[$well - 1] . " - Failed to retrieve well \n";
             next;
@@ -412,17 +408,17 @@ if ($db_update) {
             my $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
             unless ( grep( /^$well$/, @wells ) ) {
                 if ($well_exp){
-                    $well_exp = $well_exp->as_hash;                    
+                    $well_exp = $well_exp->as_hash;
                     $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
-                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;                
+                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
                     $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
                     $model->schema->resultset('MiseqWellExperiment')->search( { id => $well_exp->{id} } )->delete_all;
                     print "Deleted Miseq Well Exp ID: " . $well_exp->{id} . "\n";
                 }
-            } 
+            }
             else {
                 if ($experiments->{$exp}->{$well}->{total_reads}) {
-                print "Attempt Well: " . $well . "\n";  
+                print "Attempt Well: " . $well . "\n";
                 unless ($well_exp) {
                      $model->schema->txn_do( sub {
                         try {
@@ -445,9 +441,9 @@ if ($db_update) {
                 }
                 else {
                     $well_exp = $well_exp->as_hash;
- 
+
                     $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
-                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;                
+                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
                     $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
 
                     $model->schema->txn_do( sub {
@@ -467,7 +463,8 @@ if ($db_update) {
                             warn "Could not update well record for " . $well_exp->{id} . ": $_";
                         };
                     });
-                } 
+                }
+
                 my @alleles = @{$experiments->{$exp}->{$well}->{allele_frequencies}};
                 if (@alleles) {
                     foreach my $freq (@alleles){
@@ -485,8 +482,6 @@ if ($db_update) {
                         );
                     }
                 }
-
-
 
                 my $histo = $experiments->{$exp}->{$well}->{histogram};
                 if ($histo) {
@@ -510,8 +505,6 @@ if ($db_update) {
                     }
                 }
 
-
-                
                 my $jobout = $experiments->{$exp}->{$well}->{jobout};
                 if ($jobout) {
                     $jobout->{id} = $well_exp->{id};
@@ -531,18 +524,14 @@ if ($db_update) {
             else {
                 if ($well_exp->{id}){
                     $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
-                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;                
+                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
                     $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
                     $model->schema->resultset('MiseqWellExperiment')->search( { id => $well_exp->{id} } )->delete_all;
                     print "Deleted Miseq Well Exp ID: " . $well_exp->{id} . "\n";
                 }
             }
         }
-    }    
-
-
-
-
+    }
     }
     print "Finished.";
 }
