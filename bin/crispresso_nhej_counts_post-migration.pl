@@ -11,6 +11,9 @@ use File::Copy qw(move);
 use Text::CSV;
 use LIMS2::Model;
 use Try::Tiny;
+use LIMS2::Model::Util::ImportCrispressoQC qw( get_crispr );
+use List::Compare::Functional qw( get_intersection );
+use Scalar::Util qw(looks_like_number);
 
 GetOptions(
     'project=s' => \my $project,
@@ -81,12 +84,12 @@ sub file_handling {
     open ($fh, '<:encoding(UTF-8)', $file_name) or die "$!";
     my @lines = read_file_lines($fh);
     close $fh;
-    
+
     return \@lines;
 }
 
 sub frameshift_check {
-    my ($experiments, @common_read) = @_; 
+    my ($experiments, @common_read) = @_;
     my $fs_check = 0;
     if ($common_read[2] eq 'True' ) {
         $fs_check = ($common_read[5] + $common_read[6]) % 3;
@@ -96,7 +99,7 @@ sub frameshift_check {
 
 sub well_builder {
     my ($mod, @well_names) = @_;
-    
+
     foreach my $number (1..12) {
         my $well_num = $number + $mod->{mod};
         foreach my $letter ( @{$mod->{letters}} ) {
@@ -107,6 +110,29 @@ sub well_builder {
 
     return @well_names;
 }
+
+sub header_hash {
+    my ( $header, @expected_titles ) = @_;
+
+    my @titles = split( /\t/, lc $header );
+    my @intersection = get_intersection( [ \@titles, \@expected_titles ] );
+    my %head;
+    %head = map { lc $titles[$_] => $_ }
+        0 .. $#titles;    #creates a hash that has all the elements of the array as keys and their index as values
+
+#check if the length of the intersection of the full array of titles is equal to the length of the array of expected titles
+#This checks that all the requested elements were found within the header of the file
+    if (scalar(@intersection) == scalar(@expected_titles)) {
+        return %head;
+    }
+    else {
+        warn "Miseq Alleles Frequency file does not hold all the required headers";
+        return;
+    }
+    return 1;
+}
+
+
 
 my $rna_seq = $ENV{LIMS2_RNA_SEQ} || "/warehouse/team229_wh01/lims2_managed_miseq_data/";
 my $base = $rna_seq . $project . '/';
@@ -124,38 +150,63 @@ for (my $i = 1; $i < 385; $i++) {
     }
 
     @exps = sort @exps;
-    my @selection;
-    my $percentages;
-    my $classes;
 
     foreach my $exp (@exps) {
         my $quant = find_file($base, $i, $exp, "Quantification_of_editing_frequency.txt");
-
         if ($quant) {
-            my @lines = @{file_handling($quant)};
-            my @nhej = ($lines[2] =~ qr/^,- NHEJ:(\d+)/);
-            my @total = ($lines[6] =~ qr/^Total Aligned:(\d+)/);
+            my $fh;
+            open ($fh, '<:encoding(UTF-8)', $quant) or die "$!";
+            chomp(my @lines  = <$fh>);
+            close $fh;
+
+            my %params;
+            my %commands = (
+                'NHEJ'           => 'nhej_reads',
+                'HDR'            => 'hdr_reads',
+                'Mixed HDR-NHEJ' => 'mixed_reads',
+                'Total Aligned'  => 'total_reads',
+            );
+            while ( @lines) {
+                my $line =  shift @lines;
+                my ( $type, $number ) = $line =~ m/^[\s\-]* #ignore whitespace, dashes at start of line
+                    ([\w\-\s]+) #then grab the type e.g. "HDR", "Mixed HDR-NHEJ", etc
+                    :(\d+) #finally the number of reads
+                    /xms;
+                next unless $type && $number;
+                if ( exists $commands{$type} ) {
+                    $params{ $commands{$type} } = $number;
+                }
+
+            }
+
 
             $experiments->{$exp}->{sprintf("%02d", $i)} = {
-                nhej    => $nhej[0],
-                total   => $total[0],
-            };
+                        nhej_reads      => $params{nhej_reads},
+                        total_reads     => $params{total_reads},
+                        hdr_reads       => $params{hdr_reads},
+                        mixed_reads     => $params{mixed_reads},
+                    };
         }
-
         my $read = find_file($base, $i, $exp, "Alleles_frequency_table.txt");
 
         if ($read) {
-            my @lines = @{file_handling($read)};
+            my $fh;
+            open ($fh, '<:encoding(UTF-8)', $read) or die "$!";
+            chomp(my @lines  = <$fh>);
+            close $fh;
+            $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
+            $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
+
             if (scalar @lines > 3) {
-                my @mixed_read = split(/,/, $lines[3]);
+                my @mixed_read = split(/\t/, $lines[3]);
                 my $mixed_check = $mixed_read[$#mixed_read];
                 if ($mixed_check >= 5) {
                     $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
                     $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Mixed';
                 } else {
-                    my @first_most_common = split(/,/, $lines[1]); 
-                    my @second_most_common = split(/,/, $lines[2]);
-                   
+                    my @first_most_common = split(/\t/, $lines[1]);
+                    my @second_most_common = split(/\t/, $lines[2]);
+
                     my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
                     if ($fs_check != 0) {
                         $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
@@ -163,18 +214,84 @@ for (my $i = 1; $i < 385; $i++) {
                     }
                 }
             }
+
+            my $histo_path = find_file($base, $i, $exp, "indel_histogram.txt");
+            my %histogram;
+            if ($histo_path) {
+                open( my $file_to_read, "<", "$histo_path" ) or die "Cannot open histogram file";
+                chomp(my @lines = <$file_to_read>);
+                close $file_to_read or die "Cannot close histogram file";
+                shift @lines;
+                while (@lines) {
+                    my $line = shift @lines;
+                    my ($key, $val) = split /\s+/, $line;
+                    if ($val and $key) {
+                        $histogram{$key} = $val;
+                    }
+                }
+            }
+
+
+            my $limit = 10;
+            my $counter = 0;
+
+            my $header = shift(@lines);    #grab the header line that holds the titles of the columns
+            my @expected_titles = ( 'aligned_sequence', 'nhej', 'unmodified', 'hdr', 'n_deleted', 'n_inserted', 'n_mutated', '#reads' );
+            my %head = header_hash( $header, @expected_titles );
+
+            while (@lines) {
+                my $line = shift @lines;
+
+                my @elements = split /\t/ , $line;
+                my $indel;
+                if (looks_like_number($elements[$head{n_inserted}]) and looks_like_number($elements[$head{n_deleted}])) {
+                    $indel = $elements[$head{n_inserted}] - $elements[$head{n_deleted}];
+                }
+                else {
+                    print "Headers are not working as intended";
+                }
+                if ($indel) {
+                    $histogram{$indel}++;
+                }
+
+                if ( $counter < $limit ) {
+                    $counter++;
+                    my @words = split( /\t/, $line );    #split the space seperated values and store them in a hash
+                    my $row = {
+                        aligned_sequence         => $words[ $head{aligned_sequence} ],
+                        nhej                     => lc $words[ $head{nhej} ],
+                        unmodified               => lc $words[ $head{unmodified} ],
+                        hdr                      => lc $words[ $head{hdr} ],
+                        n_deleted                => int $words[ $head{n_deleted} ],
+                        n_inserted               => int $words[ $head{n_inserted} ],
+                        n_mutated                => int $words[ $head{n_mutated} ],
+                        n_reads                  => int $words[ $head{'#reads'} ],
+                    };
+                    push ( @{$experiments->{$exp}->{sprintf("%02d", $i)}->{allele_frequencies}}, $row );
+                }
+            }
+            $experiments->{$exp}->{sprintf("%02d", $i)}->{histogram} = \%histogram;
+        }
+        my $jobout = find_file($base, $i, $exp, "job.out");
+        if ($jobout) {
+            my $job = get_crispr($jobout);
+            $experiments->{$exp}->{sprintf("%02d", $i)}->{jobout} = $job;
         }
     }
 }
 
 my $result;
-
 foreach my $exp (keys %{$experiments}) {
     my $nhej = 0;
     my $total = 0;
     foreach my $index (keys %{$experiments->{$exp}}) {
-        $nhej += $experiments->{$exp}->{$index}->{nhej};
-        $total += $experiments->{$exp}->{$index}->{total};
+        my $nhej_well = $experiments->{$exp}->{$index}->{nhej_reads} || 0;
+        my $total_well = $experiments->{$exp}->{$index}->{total_reads} || 0;
+        $nhej += $nhej_well;
+        $total += $total_well;
+    }
+    unless ($total) {
+        next;
     }
     my $target = sprintf("%.2f", ($nhej / $total) * 100);
     $result->{$exp} = {
@@ -193,7 +310,7 @@ if ($summary) { #One time use code
 
     open my $in, "<:encoding(utf8)", $old_file or die "$old_file: $!";
     open my $out, '>', $new_file or die "$new_file: $!";
-    
+
     my $header = $csv->getline($in);
     if (scalar @$header != 9) {
         splice @$header, 6, 0, "NHEJ";
@@ -227,6 +344,7 @@ if ($db_update) {
     close $fh;
 
     my $plate_rs = $model->schema->resultset('Plate')->find({ name => $project })->as_hash;
+
     my $proj_rs = $model->schema->resultset('MiseqPlate')->find({ plate_id => $plate_rs->{id} })->as_hash;
 
     my @well_names;
@@ -241,11 +359,11 @@ if ($db_update) {
         },
         '2' => {
             mod     => 0,
-            letters => ['I','J','K','L','M','N','O','P'], 
+            letters => ['I','J','K','L','M','N','O','P'],
         },
         '3' => {
             mod     => 12,
-            letters => ['I','J','K','L','M','N','O','P'], 
+            letters => ['I','J','K','L','M','N','O','P'],
         }
     };
 
@@ -262,7 +380,7 @@ if ($db_update) {
                         miseq_id        => $proj_rs->{id},
                         name            => $exp,
                         gene            => (split(/_/,$ov->{$exp}[0]))[0],
-                        mutation_reads  => $result->{$exp}->{nhej} || '0',
+                        nhej_reads      => $result->{$exp}->{nhej} || '0',
                         total_reads     => $result->{$exp}->{total} || '1',
                     });
                     print "Inserted Miseq ID: " . $proj_rs->{id} . " Experiment: " . $exp . "\n";
@@ -276,20 +394,57 @@ if ($db_update) {
         }
 
         $exp_check = $exp_check->as_hash;
-        foreach my $well (keys %{$experiments->{$exp}}) {
-            if (defined $experiments->{$exp}->{$well}->{frameshifted}) {
-                print "Attempt Well: " . $well . "\n";
-                my $well_rs = $model->schema->resultset('Well')->find({ plate_id => $plate_rs->{id}, name => $well_names[$well - 1] });
-                if ($well_rs) {
-                    $well_rs = $well_rs->as_hash;
-                } else {
-                    print "Plate: " . $plate_rs->{id} . ", Well: " . $well_names[$well - 1] . " - Failed to retrieve well";
-                    next;
-                }
-                my $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
+        my @wells = keys %{$experiments->{$exp}};
 
-                if ($well_exp) {
+        for (my $well = 1; $well < 385; $well++) {
+            my $well_rs = $model->schema->resultset('Well')->find({ plate_id => $plate_rs->{id}, name => $well_names[$well - 1] });
+            if ($well_rs) {
+                $well_rs = $well_rs->as_hash;
+            }
+            else {
+                print "Plate: " . $plate_rs->{id} . ", Well: " . $well_names[$well - 1] . " - Failed to retrieve well \n";
+            next;
+            }
+            my $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
+            unless ( grep( /^$well$/, @wells ) ) {
+                if ($well_exp){
                     $well_exp = $well_exp->as_hash;
+                    $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
+                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
+                    $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
+                    $model->schema->resultset('MiseqWellExperiment')->search( { id => $well_exp->{id} } )->delete_all;
+                    print "Deleted Miseq Well Exp ID: " . $well_exp->{id} . "\n";
+                }
+            }
+            else {
+                if ($experiments->{$exp}->{$well}->{total_reads}) {
+                print "Attempt Well: " . $well . "\n";
+                unless ($well_exp) {
+                     $model->schema->txn_do( sub {
+                        try {
+                            $well_exp = $model->create_miseq_well_experiment({
+                                well_id         => $well_rs->{id},
+                                miseq_exp_id    => $exp_check->{id},
+                                classification  => $experiments->{$exp}->{$well}->{classification},
+                                frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
+                                total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
+                                nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
+                                hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
+                                mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
+                            })->as_hash;
+                            print "Created Miseq Well Exp ID: " . $well_exp->{id} . "\n"
+                        }
+                        catch {
+                            warn "Could not create well record for " . $well_rs->{id} . ": $_";
+                        };
+                    });
+                }
+                else {
+                    $well_exp = $well_exp->as_hash;
+
+                    $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
+                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
+                    $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
 
                     $model->schema->txn_do( sub {
                         try {
@@ -297,6 +452,10 @@ if ($db_update) {
                                 id              => $well_exp->{id},
                                 classification  => $well_exp->{classification} || $experiments->{$exp}->{$well}->{classification},
                                 frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
+                                nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
+                                total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
+                                hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
+                                mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
                             });
                             print "Updated Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . " Well: " . $well . "\n";
                         }
@@ -304,25 +463,75 @@ if ($db_update) {
                             warn "Could not update well record for " . $well_exp->{id} . ": $_";
                         };
                     });
-                } else {
-                    $model->schema->txn_do( sub {
-                        try {
-                            $model->create_miseq_well_experiment({
-                                well_id         => $well_rs->{id},
-                                miseq_exp_id    => $exp_check->{id},
-                                classification  => $experiments->{$exp}->{$well}->{classification},
-                                frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
-                            });
-                            $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} })->as_hash;
-                            print "Created Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . "\n";
-                        }
-                        catch {
-                            warn "Could not create well record for " . $well_rs->{id} . ": $_";
+                }
+
+                my @alleles = @{$experiments->{$exp}->{$well}->{allele_frequencies}};
+                if (@alleles) {
+                    foreach my $freq (@alleles){
+                        $freq->{miseq_well_experiment_id} = $well_exp->{id};
+                        $model->schema->txn_do(
+                            sub {
+                                try {
+                                    $model->create_miseq_alleles_frequency($freq);
+                                }
+                                catch {
+                                    warn "Error creating entry";
+                                    $model->schema->txn_rollback;
+                                };
+                            }
+                        );
+                    }
+                }
+
+                my $histo = $experiments->{$exp}->{$well}->{histogram};
+                if ($histo) {
+                    foreach my $key (keys %{$histo}) {
+                        my $row = {
+                            miseq_well_experiment_id    =>  $well_exp->{id},
+                            indel_size                  =>  $key,
+                            frequency                   =>  $histo->{$key},
                         };
-                    });
+                        $model->schema->txn_do(
+                            sub {
+                                try {
+                                    $model->create_indel_histogram($row);
+                                }
+                                catch {
+                                    warn "Error creating indel histogram entry";
+                                    $model->schema->txn_rollback;
+                                };
+                            }
+                        );
+                    }
+                }
+
+                my $jobout = $experiments->{$exp}->{$well}->{jobout};
+                if ($jobout) {
+                    $jobout->{id} = $well_exp->{id};
+                    $model->schema->txn_do(
+                        sub {
+                            try {
+                                $model->create_crispr_submission($jobout);
+                            }
+                            catch {
+                                warn "Error creating cripr submission entry";
+                                $model->schema->txn_rollback;
+                            };
+                        }
+                    );
+                }
+            }
+            else {
+                if ($well_exp->{id}){
+                    $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
+                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
+                    $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
+                    $model->schema->resultset('MiseqWellExperiment')->search( { id => $well_exp->{id} } )->delete_all;
+                    print "Deleted Miseq Well Exp ID: " . $well_exp->{id} . "\n";
                 }
             }
         }
+    }
     }
     print "Finished.";
 }
