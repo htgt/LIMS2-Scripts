@@ -180,7 +180,7 @@ for (my $i = 1; $i < 385; $i++) {
             }
 
 
-            $experiments->{$exp}->{sprintf("%02d", $i)} = {
+            $experiments->{$exp}->{$i} = {
                         nhej_reads      => $params{nhej_reads},
                         total_reads     => $params{total_reads},
                         hdr_reads       => $params{hdr_reads},
@@ -194,23 +194,23 @@ for (my $i = 1; $i < 385; $i++) {
             open ($fh, '<:encoding(UTF-8)', $read) or die "$!";
             chomp(my @lines  = <$fh>);
             close $fh;
-            $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
-            $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
+            $experiments->{$exp}->{$i}->{classification} = 'Not Called';
+            $experiments->{$exp}->{$i}->{frameshifted} = 0;
 
             if (scalar @lines > 3) {
                 my @mixed_read = split(/\t/, $lines[3]);
                 my $mixed_check = $mixed_read[$#mixed_read];
                 if ($mixed_check >= 5) {
-                    $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 0;
-                    $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Mixed';
+                    $experiments->{$exp}->{$i}->{frameshifted} = 0;
+                    $experiments->{$exp}->{$i}->{classification} = 'Mixed';
                 } else {
                     my @first_most_common = split(/\t/, $lines[1]);
                     my @second_most_common = split(/\t/, $lines[2]);
 
                     my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
                     if ($fs_check != 0) {
-                        $experiments->{$exp}->{sprintf("%02d", $i)}->{classification} = 'Not Called';
-                        $experiments->{$exp}->{sprintf("%02d", $i)}->{frameshifted} = 1;
+                        $experiments->{$exp}->{$i}->{classification} = 'Not Called';
+                        $experiments->{$exp}->{$i}->{frameshifted} = 1;
                     }
                 }
             }
@@ -267,15 +267,15 @@ for (my $i = 1; $i < 385; $i++) {
                         n_mutated                => int $words[ $head{n_mutated} ],
                         n_reads                  => int $words[ $head{'#reads'} ],
                     };
-                    push ( @{$experiments->{$exp}->{sprintf("%02d", $i)}->{allele_frequencies}}, $row );
+                    push ( @{$experiments->{$exp}->{$i}->{allele_frequencies}}, $row );
                 }
             }
-            $experiments->{$exp}->{sprintf("%02d", $i)}->{histogram} = \%histogram;
+            $experiments->{$exp}->{$i}->{histogram} = \%histogram;
         }
         my $jobout = find_file($base, $i, $exp, "job.out");
         if ($jobout) {
             my $job = get_crispr($jobout);
-            $experiments->{$exp}->{sprintf("%02d", $i)}->{jobout} = $job;
+            $experiments->{$exp}->{$i}->{jobout} = $job;
         }
     }
 }
@@ -366,11 +366,9 @@ if ($db_update) {
             letters => ['I','J','K','L','M','N','O','P'],
         }
     };
-
     for (my $ind = 0; $ind < 4; $ind++) {
         @well_names = well_builder($quads->{$ind}, @well_names);
     }
-
     foreach my $exp (keys %{$result}) {
         my $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
         unless ($exp_check) {
@@ -395,7 +393,6 @@ if ($db_update) {
 
         $exp_check = $exp_check->as_hash;
         my @wells = keys %{$experiments->{$exp}};
-
         for (my $well = 1; $well < 385; $well++) {
             my $well_rs = $model->schema->resultset('Well')->find({ plate_id => $plate_rs->{id}, name => $well_names[$well - 1] });
             if ($well_rs) {
@@ -418,7 +415,7 @@ if ($db_update) {
             }
             else {
                 if ($experiments->{$exp}->{$well}->{total_reads}) {
-                print "Attempt Well: " . $well . "\n";
+                    print "Attempt Well: " . $well . "\n";
                 unless ($well_exp) {
                      $model->schema->txn_do( sub {
                         try {
@@ -432,7 +429,7 @@ if ($db_update) {
                                 hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
                                 mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
                             })->as_hash;
-                            print "Created Miseq Well Exp ID: " . $well_exp->{id} . "\n"
+                        print "Created Miseq Well Exp ID: " . $well_exp->{id} . "\n"
                         }
                         catch {
                             warn "Could not create well record for " . $well_rs->{id} . ": $_";
@@ -457,7 +454,7 @@ if ($db_update) {
                                 hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
                                 mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
                             });
-                            print "Updated Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . " Well: " . $well . "\n";
+                        print "Updated Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . " Well: " . $well . "\n";
                         }
                         catch {
                             warn "Could not update well record for " . $well_exp->{id} . ": $_";
