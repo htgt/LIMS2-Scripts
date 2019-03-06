@@ -248,6 +248,11 @@ for (my $i = 1; $i < 385; $i++) {
                         n_mutated                => int $elements[ $head{n_mutated} ],
                         n_reads                  => int $elements[ $head{'#reads'} ],
                     };
+                    if ($head{Phred_Quality}){
+                        $row->{phred_quality} = $elements[ $head{Phred_Quality}];
+
+$DB::single=1;
+                    }
                     push ( @{$experiments->{$exp}->{$i}->{allele_frequencies}}, $row );
                 }
             }
@@ -398,6 +403,7 @@ if ($db_update) {
                 if ($experiments->{$exp}->{$well}->{total_reads}) {
                     print "Attempt Well: " . $well . "\n";
                 unless ($well_exp) {
+$DB::single=1;
                      $model->schema->txn_do( sub {
                         try {
                             $well_exp = $model->create_miseq_well_experiment({
