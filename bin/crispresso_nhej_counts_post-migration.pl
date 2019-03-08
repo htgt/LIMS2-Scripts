@@ -113,7 +113,6 @@ sub well_builder {
 
 sub header_hash {
     my ( $header, @expected_titles ) = @_;
-
     my @titles = split( /\t/, lc $header );
     my @intersection = get_intersection( [ \@titles, \@expected_titles ] );
     my %head;
@@ -248,11 +247,15 @@ for (my $i = 1; $i < 385; $i++) {
                         n_mutated                => int $elements[ $head{n_mutated} ],
                         n_reads                  => int $elements[ $head{'#reads'} ],
                     };
-                    if ($head{Phred_Quality}){
-                        $row->{phred_quality} = $elements[ $head{Phred_Quality}];
+                    if ($head{phred_quality}){
+                        $row->{quality_score} = $elements[ $head{phred_quality}];
 
-$DB::single=1;
                     }
+                    if ($head{reference_sequence}){
+                        $row->{reference_sequence} = $elements[ $head{reference_sequence}];
+
+                    }
+
                     push ( @{$experiments->{$exp}->{$i}->{allele_frequencies}}, $row );
                 }
             }
@@ -402,30 +405,28 @@ if ($db_update) {
             else {
                 if ($experiments->{$exp}->{$well}->{total_reads}) {
                     print "Attempt Well: " . $well . "\n";
-                unless ($well_exp) {
-$DB::single=1;
-                     $model->schema->txn_do( sub {
-                        try {
-                            $well_exp = $model->create_miseq_well_experiment({
-                                well_id         => $well_rs->{id},
-                                miseq_exp_id    => $exp_check->{id},
-                                classification  => $experiments->{$exp}->{$well}->{classification},
-                                frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
-                                total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
-                                nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
-                                hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
-                                mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
-                            })->as_hash;
-                        print "Created Miseq Well Exp ID: " . $well_exp->{id} . "\n"
-                        }
-                        catch {
-                            warn "Could not create well record for " . $well_rs->{id} . ": $_";
-                        };
-                    });
-                }
-                else {
+                    unless ($well_exp) {
+                        $model->schema->txn_do( sub {
+                            try {
+                                $well_exp = $model->create_miseq_well_experiment({
+                                    well_id         => $well_rs->{id},
+                                    miseq_exp_id    => $exp_check->{id},
+                                    classification  => $experiments->{$exp}->{$well}->{classification},
+                                    frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
+                                    total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
+                                    nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
+                                    hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
+                                    mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
+                                })->as_hash;
+                            print "Created Miseq Well Exp ID: " . $well_exp->{id} . "\n"
+                            }
+                            catch {
+                                warn "Could not create well record for " . $well_rs->{id} . ": $_";
+                            };
+                        });
+                    }
+                    else {
                     $well_exp = $well_exp->as_hash;
-
                     $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
                     $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
                     $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
@@ -448,7 +449,6 @@ $DB::single=1;
                         };
                     });
                 }
-
                 my @alleles = @{$experiments->{$exp}->{$well}->{allele_frequencies}};
                 if (@alleles) {
                     foreach my $freq (@alleles){
