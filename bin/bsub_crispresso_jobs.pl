@@ -76,7 +76,7 @@ OUTER: foreach my $line (@samples_info) {
                      ." -a $amplicon"
                      ." -g $crispr_site";
             } else {
-                $crispresso_cmd = "$crispresso -w 50 --hide_mutations_outside_window_NHEJ --save_also_png "
+                $crispresso_cmd = "$crispresso -w 50 --quality --hide_mutations_outside_window_NHEJ --save_also_png "
                      ." -o $output_dir"
                      ." -r1 $fwd_file"
                      ." -r2 $rev_file"
