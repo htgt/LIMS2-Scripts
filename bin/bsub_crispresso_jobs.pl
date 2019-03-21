@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 use feature qw/ say /;
+use FindBin qw/$Bin/;
 use Path::Class;
 use Getopt::Long;
 
@@ -33,23 +34,14 @@ $offset = $offset || 0;
 my $dir = dir($dir_name);
 my @files = $dir->children;
 my @samples_info = file($samples_file_name)->slurp(chomp => 1);
+open my $cmd_file, '>', 'crispresso.sh' or die "Cannot open crispresso.sh: $!";
+my $num_cmds = 0;
 OUTER: foreach my $line (@samples_info) {
-	my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $barcode_range, $hdr) = split /\s*,\s*/, $line;
+	my ($exp_id, $gene, $crispr_seq, $crispr_strand, $amplicon, $min_index, $max_index, $hdr) = split /\s*,\s*/, $line;
 
-    if ($barcode_range eq 'Barcode Range') {next OUTER};
+    if ($min_index eq 'min_index') {next OUTER};
 
-    my @barcode_sets = split /\s*;\s*/, $barcode_range;
-    my @barcodes;
-    
-    foreach my $wells (@barcode_sets) {
-        if ($wells =~ /\s*-\s*/){
-            my ($start,$end) = split /\s*-\s*/, $wells;
-            push (@barcodes, $start..$end);
-        } else {
-            push (@barcodes, $wells);
-        }
-    }
-    
+    my @barcodes = $min_index .. $max_index;
     my $crispr_site = substr($crispr_seq,0,20);
 
     foreach my $barcode (@barcodes) {
@@ -87,18 +79,19 @@ OUTER: foreach my $line (@samples_info) {
             if ($hdr) {
                 $crispresso_cmd = $crispresso_cmd . " -e $hdr";
             }
-
-            my $bsub_cmd = 'bsub -n1 -q normal -G team87-grp -M2000 -R"select[mem>2000] rusage[mem=2000] span[hosts=1]"'
-                           ." -eo $output_dir/job.err"
-                           ." -oo $output_dir/job.out"
-                           ." $crispresso_cmd";
-
-            say "Running command $bsub_cmd";
-            my $cmd_output = `$bsub_cmd`;
-            say "Command output: $cmd_output";
+            print {$cmd_file} $crispresso_cmd, "\n";
+            $num_cmds++;
         } else {
-        	say "No file found for barcode $barcode";
+            say "No file found for barcode $barcode";
         }
     }
 }
+
+my $bsub_cmd = "bsub -J \"crispresso[1-$num_cmds]\" -n1 -q normal -G team87-grp -M2000 -R\"select[mem>2000] rusage[mem=2000] span[hosts=1]\""
+   ." -e job.%J.%I.err"
+   ." -o job.%J.%I.out"
+   ." $Bin/bjob_crispresso.sh";
+say "Running command $bsub_cmd";
+my $cmd_output = `$bsub_cmd`;
+say "Command output: $cmd_output";
 
