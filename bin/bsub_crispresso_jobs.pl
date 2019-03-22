@@ -14,7 +14,7 @@ use Getopt::Long;
 # NB: Experiment ID is just a unique identifier for the combination of amplicon and crispr used.
 # It is not a LIMS2 experiment ID at this stage in development.
 
-my $crispresso = $ENV{CRISPRESSO_CMD} || "/nfs/team87/farm3_lims2_vms/software/python_local/bin/CRISPResso";
+my $crispresso = $ENV{CRISPRESSO_CMD};
 
 GetOptions(
     'samples=s' => \my $samples_file_name,

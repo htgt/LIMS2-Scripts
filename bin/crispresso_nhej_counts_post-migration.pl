@@ -113,7 +113,6 @@ sub well_builder {
 
 sub header_hash {
     my ( $header, @expected_titles ) = @_;
-
     my @titles = split( /\t/, lc $header );
     my @intersection = get_intersection( [ \@titles, \@expected_titles ] );
     my %head;
@@ -215,58 +214,48 @@ for (my $i = 1; $i < 385; $i++) {
                 }
             }
 
-            my $histo_path = find_file($base, $i, $exp, "indel_histogram.txt");
-            my %histogram;
-            if ($histo_path) {
-                open( my $file_to_read, "<", "$histo_path" ) or die "Cannot open histogram file";
-                chomp(my @lines = <$file_to_read>);
-                close $file_to_read or die "Cannot close histogram file";
-                shift @lines;
-                while (@lines) {
-                    my $line = shift @lines;
-                    my ($key, $val) = split /\s+/, $line;
-                    if ($val and $key) {
-                        $histogram{$key} = $val;
-                    }
-                }
-            }
-
 
             my $limit = 10;
             my $counter = 0;
-
+            my %histogram;
             my $header = shift(@lines);    #grab the header line that holds the titles of the columns
             my @expected_titles = ( 'aligned_sequence', 'nhej', 'unmodified', 'hdr', 'n_deleted', 'n_inserted', 'n_mutated', '#reads' );
             my %head = header_hash( $header, @expected_titles );
 
             while (@lines) {
                 my $line = shift @lines;
-
                 my @elements = split /\t/ , $line;
                 my $indel;
                 if (looks_like_number($elements[$head{n_inserted}]) and looks_like_number($elements[$head{n_deleted}])) {
-                    $indel = $elements[$head{n_inserted}] - $elements[$head{n_deleted}];
+                    $indel = int ($elements[$head{n_inserted}]) - int ($elements[$head{n_deleted}]);
                 }
                 else {
                     print "Headers are not working as intended";
                 }
                 if ($indel) {
-                    $histogram{$indel}++;
-                }
-
+                    $histogram{$indel}+=$elements[$head{'#reads'}];
+                } 
                 if ( $counter < $limit ) {
                     $counter++;
-                    my @words = split( /\t/, $line );    #split the space seperated values and store them in a hash
                     my $row = {
-                        aligned_sequence         => $words[ $head{aligned_sequence} ],
-                        nhej                     => lc $words[ $head{nhej} ],
-                        unmodified               => lc $words[ $head{unmodified} ],
-                        hdr                      => lc $words[ $head{hdr} ],
-                        n_deleted                => int $words[ $head{n_deleted} ],
-                        n_inserted               => int $words[ $head{n_inserted} ],
-                        n_mutated                => int $words[ $head{n_mutated} ],
-                        n_reads                  => int $words[ $head{'#reads'} ],
+                        aligned_sequence         => $elements[ $head{aligned_sequence} ],
+                        nhej                     => lc $elements[ $head{nhej} ],
+                        unmodified               => lc $elements[ $head{unmodified} ],
+                        hdr                      => lc $elements[ $head{hdr} ],
+                        n_deleted                => int $elements[ $head{n_deleted} ],
+                        n_inserted               => int $elements[ $head{n_inserted} ],
+                        n_mutated                => int $elements[ $head{n_mutated} ],
+                        n_reads                  => int $elements[ $head{'#reads'} ],
                     };
+                    if ($head{phred_quality}){
+                        $row->{quality_score} = $elements[ $head{phred_quality}];
+
+                    }
+                    if ($head{reference_sequence}){
+                        $row->{reference_sequence} = $elements[ $head{reference_sequence}];
+
+                    }
+
                     push ( @{$experiments->{$exp}->{$i}->{allele_frequencies}}, $row );
                 }
             }
@@ -416,29 +405,28 @@ if ($db_update) {
             else {
                 if ($experiments->{$exp}->{$well}->{total_reads}) {
                     print "Attempt Well: " . $well . "\n";
-                unless ($well_exp) {
-                     $model->schema->txn_do( sub {
-                        try {
-                            $well_exp = $model->create_miseq_well_experiment({
-                                well_id         => $well_rs->{id},
-                                miseq_exp_id    => $exp_check->{id},
-                                classification  => $experiments->{$exp}->{$well}->{classification},
-                                frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
-                                total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
-                                nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
-                                hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
-                                mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
-                            })->as_hash;
-                        print "Created Miseq Well Exp ID: " . $well_exp->{id} . "\n"
-                        }
-                        catch {
-                            warn "Could not create well record for " . $well_rs->{id} . ": $_";
-                        };
-                    });
-                }
-                else {
+                    unless ($well_exp) {
+                        $model->schema->txn_do( sub {
+                            try {
+                                $well_exp = $model->create_miseq_well_experiment({
+                                    well_id         => $well_rs->{id},
+                                    miseq_exp_id    => $exp_check->{id},
+                                    classification  => $experiments->{$exp}->{$well}->{classification},
+                                    frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
+                                    total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
+                                    nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
+                                    hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
+                                    mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
+                                })->as_hash;
+                            print "Created Miseq Well Exp ID: " . $well_exp->{id} . "\n"
+                            }
+                            catch {
+                                warn "Could not create well record for " . $well_rs->{id} . ": $_";
+                            };
+                        });
+                    }
+                    else {
                     $well_exp = $well_exp->as_hash;
-
                     $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
                     $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
                     $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
@@ -461,7 +449,6 @@ if ($db_update) {
                         };
                     });
                 }
-
                 my @alleles = @{$experiments->{$exp}->{$well}->{allele_frequencies}};
                 if (@alleles) {
                     foreach my $freq (@alleles){
