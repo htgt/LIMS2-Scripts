@@ -214,7 +214,6 @@ for (my $i = 1; $i < 385; $i++) {
                     }
                 }
             }
-
             my $histo_path = find_file($base, $i, $exp, "indel_histogram.txt");
             my %histogram;
             if ($histo_path) {
@@ -230,30 +229,15 @@ for (my $i = 1; $i < 385; $i++) {
                     }
                 }
             }
-
-
             my $limit = 10;
             my $counter = 0;
-
             my $header = shift(@lines);    #grab the header line that holds the titles of the columns
             my @expected_titles = ( 'aligned_sequence', 'nhej', 'unmodified', 'hdr', 'n_deleted', 'n_inserted', 'n_mutated', '#reads' );
             my %head = header_hash( $header, @expected_titles );
 
             while (@lines) {
                 my $line = shift @lines;
-
                 my @elements = split /\t/ , $line;
-                my $indel;
-                if (looks_like_number($elements[$head{n_inserted}]) and looks_like_number($elements[$head{n_deleted}])) {
-                    $indel = $elements[$head{n_inserted}] - $elements[$head{n_deleted}];
-                }
-                else {
-                    print "Headers are not working as intended";
-                }
-                if ($indel) {
-                    $histogram{$indel}++;
-                }
-
                 if ( $counter < $limit ) {
                     $counter++;
                     my @words = split( /\t/, $line );    #split the space seperated values and store them in a hash
@@ -268,6 +252,23 @@ for (my $i = 1; $i < 385; $i++) {
                         n_reads                  => int $words[ $head{'#reads'} ],
                     };
                     push ( @{$experiments->{$exp}->{$i}->{allele_frequencies}}, $row );
+                }
+                my $indel;
+                if ( $histo_path ) {
+                    if ( $counter >= $limit ) {
+                        last;
+                    }
+                }
+                else {
+                    if (looks_like_number($elements[$head{n_inserted}]) and looks_like_number($elements[$head{n_deleted}])) {
+                        $indel = $elements[$head{n_inserted}] - $elements[$head{n_deleted}];
+                    }
+                    else {
+                        print "Headers are not working as intended";
+                    }
+                    if ($indel) {
+                        $histogram{$indel}+=$elements[$head{'#reads'}];
+                    }
                 }
             }
             $experiments->{$exp}->{$i}->{histogram} = \%histogram;
