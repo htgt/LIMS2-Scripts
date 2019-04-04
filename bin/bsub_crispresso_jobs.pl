@@ -90,7 +90,7 @@ OUTER: foreach my $line (@samples_info) {
 my $bsub_cmd = "bsub -J \"crispresso[1-$num_cmds]\" -n1 -q normal -G team87-grp -M2000 -R\"select[mem>2000] rusage[mem=2000] span[hosts=1]\""
    ." -e job.%J.%I.err"
    ." -o job.%J.%I.out"
-   ." $Bin/bjob_crispresso.sh";
+   ." $Bin/bjob_crispresso_manual.sh";
 say "Running command $bsub_cmd";
 my $cmd_output = `$bsub_cmd`;
 say "Command output: $cmd_output";
