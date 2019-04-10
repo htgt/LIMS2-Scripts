@@ -1,7 +1,7 @@
 #!/usr/local/bin/bash
-PYTHONPATH=/nfs/team87/farm3_lims2_vms/software/python_local/lib/python/
-PATH=/nfs/team87/farm3_lims2_vms/software/crispresso_dependencies/bin:$PATH
-crispresso=${CRISPRESSO_CMD:-/nfs/team87/farm3_lims2_vms/software/python_local/bin/CRISPResso}
+export PYTHONPATH=/nfs/team87/farm3_lims2_vms/software/python_local/lib/python/
+export PATH=/nfs/team87/farm3_lims2_vms/software/crispresso_dependencies/bin:$PATH
+export crispresso=${CRISPRESSO_CMD:-/nfs/team87/farm3_lims2_vms/software/python_local/bin/CRISPResso}
 single=0
 reverse=0
 offset=0
