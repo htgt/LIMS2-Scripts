@@ -112,9 +112,21 @@ sub well_builder {
 }
 
 sub header_hash {
-    my ( $header, @expected_titles ) = @_;
+    my ( $header ) = @_;
 
     my @titles = split( /\t/, lc $header );
+    my @expected_titles = (
+        'aligned_sequence',
+        'reference_sequence',
+        'phred_quality',
+        'nhej',
+        'unmodified',
+        'hdr',
+        'n_deleted',
+        'n_inserted',
+        'n_mutated',
+        '#reads',
+    );
     my @intersection = get_intersection( [ \@titles, \@expected_titles ] );
     my %head;
     %head = map { lc $titles[$_] => $_ }
@@ -122,14 +134,12 @@ sub header_hash {
 
 #check if the length of the intersection of the full array of titles is equal to the length of the array of expected titles
 #This checks that all the requested elements were found within the header of the file
-    if (scalar(@intersection) == scalar(@expected_titles)) {
-        return %head;
-    }
-    else {
-        warn "Miseq Alleles Frequency file does not hold all the required headers";
+    if (scalar(@intersection) == 0) {
+        warn "Miseq Alleles Frequency file is empty";
         return;
     }
-    return 1;
+
+    return %head;
 }
 
 
@@ -139,6 +149,7 @@ my $base = $rna_seq . $project . '/';
 my $experiments;
 
 for (my $i = 1; $i < 385; $i++) {
+    print "Finding exps for well $i. \n";
     my $reg = "S" . $i . "_exp[A-Za-z0-9_]+";
     my @files = find_children($base, $reg);
     my @exps;
@@ -181,11 +192,11 @@ for (my $i = 1; $i < 385; $i++) {
 
 
             $experiments->{$exp}->{$i} = {
-                        nhej_reads      => $params{nhej_reads},
-                        total_reads     => $params{total_reads},
-                        hdr_reads       => $params{hdr_reads},
-                        mixed_reads     => $params{mixed_reads},
-                    };
+                nhej_reads      => $params{nhej_reads},
+                total_reads     => $params{total_reads},
+                hdr_reads       => $params{hdr_reads},
+                mixed_reads     => $params{mixed_reads},
+            };
         }
         my $read = find_file($base, $i, $exp, "Alleles_frequency_table.txt");
 
@@ -232,9 +243,8 @@ for (my $i = 1; $i < 385; $i++) {
             my $limit = 10;
             my $counter = 0;
             my $header = shift(@lines);    #grab the header line that holds the titles of the columns
-            my @expected_titles = ( 'aligned_sequence', 'nhej', 'unmodified', 'hdr', 'n_deleted', 'n_inserted', 'n_mutated', '#reads' );
-            my %head = header_hash( $header, @expected_titles );
 
+            my %head = header_hash( $header );
             while (@lines) {
                 my $line = shift @lines;
                 my @elements = split /\t/ , $line;
@@ -242,7 +252,7 @@ for (my $i = 1; $i < 385; $i++) {
                     $counter++;
                     my @words = split( /\t/, $line );    #split the space seperated values and store them in a hash
                     my $row = {
-                        aligned_sequence         => $words[ $head{aligned_sequence} ],
+                        aligned_sequence         => uc $words[ $head{aligned_sequence} ],
                         nhej                     => lc $words[ $head{nhej} ],
                         unmodified               => lc $words[ $head{unmodified} ],
                         hdr                      => lc $words[ $head{hdr} ],
@@ -251,6 +261,14 @@ for (my $i = 1; $i < 385; $i++) {
                         n_mutated                => int $words[ $head{n_mutated} ],
                         n_reads                  => int $words[ $head{'#reads'} ],
                     };
+                    if ($head{phred_quality}) {
+                        $row->{quality_score} = $words[ $head{phred_quality} ];
+                    }
+
+                    if ($head{reference_sequence}) {
+                        $row->{reference_sequence} = uc $words[ $head{reference_sequence} ];
+                    }
+
                     push ( @{$experiments->{$exp}->{$i}->{allele_frequencies}}, $row );
                 }
                 my $indel;
@@ -267,7 +285,7 @@ for (my $i = 1; $i < 385; $i++) {
                         print "Headers are not working as intended";
                     }
                     if ($indel) {
-                        $histogram{$indel}+=$elements[$head{'#reads'}];
+                        $histogram{$indel} += $elements[$head{'#reads'}];
                     }
                 }
             }
@@ -399,49 +417,20 @@ if ($db_update) {
             }
             else {
                 print "Plate: " . $plate_rs->{id} . ", Well: " . $well_names[$well - 1] . " - Failed to retrieve well \n";
-            next;
+                next;
             }
             my $well_exp = $model->schema->resultset('MiseqWellExperiment')->find({ well_id => $well_rs->{id}, miseq_exp_id => $exp_check->{id} });
-            unless ( grep( /^$well$/, @wells ) ) {
-                if ($well_exp){
-                    $well_exp = $well_exp->as_hash;
-                    $model->schema->resultset('MiseqAllelesFrequency')->search({ miseq_well_experiment_id => $well_exp->{id} })->delete_all;
-                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id} })->delete_all;
-                    $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id} })->delete_all;
-                    $model->schema->resultset('MiseqWellExperiment')->search({ id => $well_exp->{id} })->delete_all;
-                    print "Deleted Miseq Well Exp ID: " . $well_exp->{id} . "\n";
-                }
+            my $alleles_freq_rs;
+            if ($well_exp) {
+                $alleles_freq_rs = $model->schema->resultset('MiseqAllelesFrequency')->search({ miseq_well_experiment_id => $well_exp->id });
             }
-            else {
-                if ($experiments->{$exp}->{$well}->{total_reads}) {
-                    print "Attempt Well: " . $well . "\n";
-                unless ($well_exp) {
-                     $model->schema->txn_do( sub {
-                        try {
-                            $well_exp = $model->create_miseq_well_experiment({
-                                well_id         => $well_rs->{id},
-                                miseq_exp_id    => $exp_check->{id},
-                                classification  => $experiments->{$exp}->{$well}->{classification} ? $experiments->{$exp}->{$well}->{classification} : 'Not Called',
-                                frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
-                                total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
-                                nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
-                                hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
-                                mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
-                            })->as_hash;
-                        print "Created Miseq Well Exp ID: " . $well_exp->{id} . "\n"
-                        }
-                        catch {
-                            warn "Could not create well record for " . $well_rs->{id} . ": $_";
-                        };
-                    });
-                }
-                else {
+
+            my $histogram_records;
+            my @alleles_ids;
+            if ($experiments->{$exp}->{$well}->{total_reads}) {
+                print "Attempt Well: " . $well . "\n";
+                if ($well_exp) {
                     $well_exp = $well_exp->as_hash;
-
-                    $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
-                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
-                    $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
-
                     $model->schema->txn_do( sub {
                         try {
                             $model->update_miseq_well_experiment({
@@ -453,10 +442,53 @@ if ($db_update) {
                                 hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
                                 mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
                             });
-                        print "Updated Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . " Well: " . $well . "\n";
+
+                            print "Updated Miseq Well Exp ID: " . $well_exp->{id} . " Frameshifted:" . $experiments->{$exp}->{$well}->{frameshifted} . " Well: " . $well . "\n";
                         }
                         catch {
                             warn "Could not update well record for " . $well_exp->{id} . ": $_";
+                        };
+                    });
+
+                    print "Clearing all alleles frequencies for " . $well_exp->{id} . "\n";
+                    while (my $freq_rs = $alleles_freq_rs->next) {
+                        push (@alleles_ids, $freq_rs->id);
+                        $model->update_miseq_alleles_frequency ({
+                            id      => $freq_rs->id,
+                            n_reads => 0,
+                            n_deleted => 0,
+                            n_inserted => 0,
+                            n_mutated => 0,
+                        });
+                    }
+
+                    print "Clearing Indel Histogram for " . $well_exp->{id} . "\n";
+                    my $histo_rs = $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id} });
+                    while (my $histo = $histo_rs->next) {
+                        $histogram_records->{$histo->indel_size} = $histo->id;
+                        $model->update_indel_histogram ({
+                            id          => $histo->id,
+                            frequency   => 0,
+                        });
+                    }
+                }
+                else {
+                    $model->schema->txn_do( sub {
+                        try {
+                            $well_exp = $model->create_miseq_well_experiment({
+                                well_id         => $well_rs->{id},
+                                miseq_exp_id    => $exp_check->{id},
+                                classification  => $experiments->{$exp}->{$well}->{classification},
+                                frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
+                                total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
+                                nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
+                                hdr_reads       => $experiments->{$exp}->{$well}->{hdr_reads} || 0, #UNTESTED
+                                mixed_reads     => $experiments->{$exp}->{$well}->{mixed_reads} || 0, #UNTESTED
+                            })->as_hash;
+                            print "Created Miseq Well Exp ID: " . $well_exp->{id} . "\n"
+                        }
+                        catch {
+                            warn "Could not create well record for " . $well_rs->{id} . ": $_";
                         };
                     });
                 }
@@ -466,19 +498,51 @@ if ($db_update) {
                     @alleles = @{$experiments->{$exp}->{$well}->{allele_frequencies}};
                 }
                 if (@alleles) {
-                    foreach my $freq (@alleles){
-                        $freq->{miseq_well_experiment_id} = $well_exp->{id};
-                        $model->schema->txn_do(
-                            sub {
-                                try {
-                                    $model->create_miseq_alleles_frequency($freq);
-                                }
-                                catch {
-                                    warn "Error creating entry";
-                                    $model->schema->txn_rollback;
-                                };
+                    if (defined $alleles_freq_rs && $alleles_freq_rs->count > 0) {
+                        foreach my $freq (@alleles) {
+                            if (scalar @alleles_ids == 0) {
+                                $freq->{miseq_well_experiment_id} = $well_exp->{id};
+                                $model->schema->txn_do(
+                                    sub {
+                                        try {
+                                            $model->create_miseq_alleles_frequency($freq);
+                                        }
+                                        catch {
+                                            warn "Error creating entry";
+                                            $model->schema->txn_rollback;
+                                        };
+                                    }
+                                );
+                            } else {
+                                $freq->{id} = shift @alleles_ids;
+                                $model->schema->txn_do(
+                                    sub {
+                                        try {
+                                            $model->update_miseq_alleles_frequency($freq);
+                                        }
+                                        catch {
+                                            warn "Error updating entry";
+                                            $model->schema->txn_rollback;
+                                        };
+                                    }
+                                );
                             }
-                        );
+                        }
+                    } else {
+                        foreach my $freq (@alleles) {
+                            $freq->{miseq_well_experiment_id} = $well_exp->{id};
+                            $model->schema->txn_do(
+                                sub {
+                                    try {
+                                        $model->create_miseq_alleles_frequency($freq);
+                                    }
+                                    catch {
+                                        warn "Error creating entry";
+                                        $model->schema->txn_rollback;
+                                    };
+                                }
+                            );
+                        }
                     }
                 }
 
@@ -490,47 +554,76 @@ if ($db_update) {
                             indel_size                  =>  $key,
                             frequency                   =>  $histo->{$key},
                         };
+                        if ($histogram_records->{$key}) {
+                            $row->{id} = $histogram_records->{$key};
+                            $model->schema->txn_do(
+                                sub {
+                                    try {
+                                        $model->update_indel_histogram($row);
+                                    }
+                                    catch {
+                                        warn "Error updating indel histogram entry: " . $_;
+                                        $model->schema->txn_rollback;
+                                    };
+                                }
+                            );
+                        } else {
+                            $model->schema->txn_do(
+                                sub {
+                                    try {
+                                        $model->create_indel_histogram($row);
+                                    }
+                                    catch {
+                                        warn "Error creating indel histogram entry: " . $_;
+                                        $model->schema->txn_rollback;
+                                    };
+                                }
+                            );
+                        }
+                    }
+                }
+
+                my $jobout = $experiments->{$exp}->{$well}->{jobout};
+                if ($jobout) {
+                    $jobout->{miseq_well_exp_id} = $well_exp->{id};
+                    my $crispr_sub_rs = $model->schema->resultset('CrispressoSubmission')->find({ miseq_well_exp_id => $jobout->{miseq_well_exp_id} });
+                    if ($crispr_sub_rs) {
                         $model->schema->txn_do(
                             sub {
                                 try {
-                                    $model->create_indel_histogram($row);
+                                    $model->update_crispr_submission($jobout);
                                 }
                                 catch {
-                                    warn "Error creating indel histogram entry";
+                                    warn "Error updating crispr submission entry: " . $_;
+                                    $model->schema->txn_rollback;
+                                };
+                            }
+                        );
+                    } else {
+                        $model->schema->txn_do(
+                            sub {
+                                try {
+                                    $model->create_crispr_submission($jobout);
+                                }
+                                catch {
+                                    warn "Error creating crispr submission entry: " . $_;
                                     $model->schema->txn_rollback;
                                 };
                             }
                         );
                     }
                 }
-
-                my $jobout = $experiments->{$exp}->{$well}->{jobout};
-                if ($jobout) {
-                    $jobout->{id} = $well_exp->{id};
-                    $model->schema->txn_do(
-                        sub {
-                            try {
-                                $model->create_crispr_submission($jobout);
-                            }
-                            catch {
-                                warn "Error creating cripr submission entry";
-                                $model->schema->txn_rollback;
-                            };
-                        }
-                    );
-                }
             }
             else {
                 if ($well_exp->{id}){
                     $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
-                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
-                    $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
+                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
+                    $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id} } )->delete_all;
                     $model->schema->resultset('MiseqWellExperiment')->search( { id => $well_exp->{id} } )->delete_all;
                     print "Deleted Miseq Well Exp ID: " . $well_exp->{id} . "\n";
                 }
             }
         }
-    }
     }
     print "Finished.";
 }
