@@ -375,6 +375,7 @@ if ($db_update) {
         unless ($exp_check) {
             try {
                 $model->create_miseq_experiment({
+
                     miseq_id        => $proj_rs->{id},
                     name            => $exp,
                     gene            => (split(/_/,$ov->{$exp}[0]))[0],
