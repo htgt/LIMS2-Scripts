@@ -373,27 +373,24 @@ if ($db_update) {
     foreach my $exp (keys %{$result}) {
         my $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
         unless ($exp_check) {
-            $model->schema->txn_do( sub {
-                try {
-                    $model->create_miseq_experiment({
-                        miseq_id        => $proj_rs->{id},
-                        name            => $exp,
-                        gene            => (split(/_/,$ov->{$exp}[0]))[0],
-                        nhej_reads      => $result->{$exp}->{nhej} || '0',
-                        total_reads     => $result->{$exp}->{total} || '1',
-                    });
-                    print "Inserted Miseq ID: " . $proj_rs->{id} . " Experiment: " . $exp . "\n";
-                }
-                catch {
-                    warn "Could not create record for " . $proj_rs->{id} . ": $_";
-                    $model->schema->txn_rollback;
-                };
-            });
+            try {
+                $model->create_miseq_experiment({
+                    miseq_id        => $proj_rs->{id},
+                    name            => $exp,
+                    gene            => (split(/_/,$ov->{$exp}[0]))[0],
+                    nhej_reads      => $result->{$exp}->{nhej} || '0',
+                    total_reads     => $result->{$exp}->{total} || '1',
+                });
+                print "Inserted Miseq ID: " . $proj_rs->{id} . " Experiment: " . $exp . "\n";
+            }
+            catch {
+                warn "Could not create record for " . $proj_rs->{id} . ": $_";
+                $model->schema->txn_rollback;
+            };
             $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
         }
-
-        $exp_check = $exp_check->as_hash;
         my @wells = keys %{$experiments->{$exp}};
+        $exp_check = $exp_check->as_hash;
         for (my $well = 1; $well < 385; $well++) {
             my $well_rs = $model->schema->resultset('Well')->find({ plate_id => $plate_rs->{id}, name => $well_names[$well - 1] });
             if ($well_rs) {
@@ -423,7 +420,7 @@ if ($db_update) {
                             $well_exp = $model->create_miseq_well_experiment({
                                 well_id         => $well_rs->{id},
                                 miseq_exp_id    => $exp_check->{id},
-                                classification  => $experiments->{$exp}->{$well}->{classification},
+                                classification  => $experiments->{$exp}->{$well}->{classification} ? $experiments->{$exp}->{$well}->{classification} : 'Not Called',
                                 frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
                                 total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
                                 nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
@@ -463,7 +460,10 @@ if ($db_update) {
                     });
                 }
 
-                my @alleles = @{$experiments->{$exp}->{$well}->{allele_frequencies}};
+                my @alleles;
+                if ($experiments->{$exp}->{$well}->{allele_frequencies}) {
+                    @alleles = @{$experiments->{$exp}->{$well}->{allele_frequencies}};
+                }
                 if (@alleles) {
                     foreach my $freq (@alleles){
                         $freq->{miseq_well_experiment_id} = $well_exp->{id};
