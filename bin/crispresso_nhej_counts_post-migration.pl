@@ -404,10 +404,10 @@ if ($db_update) {
             unless ( grep( /^$well$/, @wells ) ) {
                 if ($well_exp){
                     $well_exp = $well_exp->as_hash;
-                    $model->schema->resultset('MiseqAllelesFrequency')->search( { miseq_well_experiment_id => $well_exp->{id} } )->delete_all;
-                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id}} )->delete_all;
-                    $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id}})->delete_all;
-                    $model->schema->resultset('MiseqWellExperiment')->search( { id => $well_exp->{id} } )->delete_all;
+                    $model->schema->resultset('MiseqAllelesFrequency')->search({ miseq_well_experiment_id => $well_exp->{id} })->delete_all;
+                    $model->schema->resultset('IndelHistogram')->search({ miseq_well_experiment_id => $well_exp->{id} })->delete_all;
+                    $model->schema->resultset('CrispressoSubmission')->search({ id => $well_exp->{id} })->delete_all;
+                    $model->schema->resultset('MiseqWellExperiment')->search({ id => $well_exp->{id} })->delete_all;
                     print "Deleted Miseq Well Exp ID: " . $well_exp->{id} . "\n";
                 }
             }
