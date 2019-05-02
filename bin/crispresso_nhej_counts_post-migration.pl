@@ -478,7 +478,7 @@ if ($db_update) {
                             $well_exp = $model->create_miseq_well_experiment({
                                 well_id         => $well_rs->{id},
                                 miseq_exp_id    => $exp_check->{id},
-                                classification  => $experiments->{$exp}->{$well}->{classification},
+                                classification  => $experiments->{$exp}->{$well}->{classification} || 'Not Called',
                                 frameshifted    => $experiments->{$exp}->{$well}->{frameshifted},
                                 total_reads     => $experiments->{$exp}->{$well}->{total_reads} || 0, #UNTESTED
                                 nhej_reads      => $experiments->{$exp}->{$well}->{nhej_reads} || 0, #UNTESTED
