@@ -87,7 +87,7 @@ OUTER: foreach my $line (@samples_info) {
     }
 }
 
-my $bsub_cmd = "bsub -J \"crispresso[1-$num_cmds]\" -n1 -q normal -G team87-grp -M2000 -R\"select[mem>2000] rusage[mem=2000] span[hosts=1]\""
+my $bsub_cmd = "bsub -J \"crispresso[1-$num_cmds]\" -n1 -q normal -G team87-grp -M2500 -R\"select[mem>2500] rusage[mem=2500] span[hosts=1]\""
    ." -e job.%J.%I.err"
    ." -o job.%J.%I.out"
    ." $Bin/bjob_crispresso_manual.sh";
