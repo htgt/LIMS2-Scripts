@@ -68,8 +68,31 @@ sub create_report_file {
 
 sub write_report {
     my ($report_fh, $mismatches) = @_;
-    while (my ($exp, $mismatch_wells) = each %$mismatches) {
-        print $report_fh "$exp: @$mismatch_wells\n";
+    while (my ($exp, $lost_wells) = each %$mismatches) {
+        print $report_fh "$exp: @$lost_wells\n";
+    }
+    return;
+}
+
+sub find_mismatches {
+    my ($exp_id, $plate_name, $exp_name) = @_;
+    my @lost_wells = ();
+    my @well_ids = get_well_ids($exp_id);
+    my %existing_well_names = map {get_well_name($_) => 1} @well_ids;
+    foreach (my $i = 1; $i < 385; $i++) {
+        if (my $lost_well = check_for_lost_well($plate_name, $i, $exp_name, \%existing_well_names)) {
+            push @lost_wells, $lost_well;
+        }
+    }
+    return @lost_wells;
+}
+
+sub check_for_lost_well {
+    my ($plate_name, $i, $exp_name, $existing_well_names) = @_;
+    my $file_path = construct_file_path($plate_name, $i, $exp_name);
+    my $well_name_to_check = convert_index_to_well_name($i);
+    if (find_mismatch($file_path, $existing_well_names, $well_name_to_check)) {
+        return $well_name_to_check;
     }
     return;
 }
@@ -81,18 +104,8 @@ my $plate = $plate_rs->find({'name' => 'Miseq_010'})->as_hash;
     print "Scanning $plate->{name}\n";
     my @exps = get_miseq_exps($plate->{id});
     foreach my $exp (@exps) {
-        my @mismatch_wells = ();
-        my @well_ids = get_well_ids($exp->{id});
-        my %existing_well_names = map {get_well_name($_) => 1} @well_ids;
-        foreach (my $i = 1; $i < 385; $i++) {
-            my $file_path = construct_file_path($plate->{name}, $i, $exp->{name});
-            my $well_name_to_check = convert_index_to_well_name($i);
-            if (find_mismatch($file_path, \%existing_well_names, $well_name_to_check)) {
-                push @mismatch_wells, $well_name_to_check;
-            }
-        }
-        if (@mismatch_wells) {
-            $mismatches{$exp->{name}} = \@mismatch_wells;
+        if (my @lost_wells = find_mismatches($exp->{id}, $plate->{name}, $exp->{name})) {
+            $mismatches{$exp->{name}} = \@lost_wells;
         }
     }
     if (keys %mismatches) {
