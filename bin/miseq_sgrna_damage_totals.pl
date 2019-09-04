@@ -17,6 +17,7 @@ GetOptions(
     'gene=s'    => \my $gene,
     'crispr=s'  => \my $crispr,
     'dump=s'    => \my $dump,
+    'file=s'    => \my $file_dir,
 );
 
 sub find_children {
@@ -154,19 +155,36 @@ my $rna_seq = $ENV{LIMS2_RNA_SEQ};
 
 my $base = $rna_seq . $miseq . '/';
 my $experiments;
+$crispr = uc $crispr;
 
-for (my $i = 1; $i < 385; $i++) {
-    my $reg = "S" . $i . "_exp*" . $gene . "*";
-    my @files = find_children($base, $reg);
+my @wells_ints;
+if ($file_dir) {
+    push @wells_ints, $file_dir;
+} else {
+    @wells_ints = (1..384);
+}
+
+foreach my $i (@wells_ints) {
+    my @files;
+    if ($i =~ /^\d+$/) {
+        my $reg = "S" . $i . "_exp*" . $gene . "*";
+        @files = find_children($base, $reg);
+    } else {
+        push @files, $i;
+    }
     my @selection;
     my $percentages;
     my $classes;
-
     foreach my $file (@files) {
-        my $allele = find_file($base, $i, $file, "Alleles_frequency_table.txt");
+        my $allele;
+        if ($file_dir) {
+            $allele = $file;
+        } else {
+            $allele = find_file($base, $i, $file, "Alleles_frequency_table.txt");
+        }
         my $read_count = 0;
         my $totals;
-
+        say $allele;
         my @lines = @{ file_handling($allele) };
         unless (@lines) {
             next;
