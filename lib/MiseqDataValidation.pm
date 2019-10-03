@@ -70,8 +70,7 @@ sub get_miseq_exps {
     my $plate_id = shift;
     my $miseq_plate_rs = $schema->resultset('MiseqPlate');
     my $miseq_exp_rs = $schema->resultset('MiseqExperiment');
-    #my $miseq_plate = $miseq_plate_rs->find({ plate_id => $plate_id });
-    if (my $miseq_plate = $miseq_plate_rs->find({ plate_id => $plate_id }, {column => 'id'})) {
+    if (my $miseq_plate = $miseq_plate_rs->find({ plate_id => $plate_id })) {
         my $miseq_plate_id = $miseq_plate->id;
         my @miseq_exps = map {$_->as_hash} $miseq_exp_rs->search({ miseq_id => $miseq_plate_id });
         return @miseq_exps;
