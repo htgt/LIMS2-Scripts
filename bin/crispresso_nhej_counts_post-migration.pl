@@ -352,6 +352,7 @@ if ($summary) { #One time use code
 
     move($new_file, $old_file) or die "Can't move: $!";
 }
+my $ov; 
 
 if ($db_update) {
     #Update miseq_exp table
@@ -359,9 +360,10 @@ if ($db_update) {
 
     my $csv = Text::CSV->new({ binary => 1 }) or die "Can't use CSV: " . Text::CSV->error_diag();
     open my $fh, '<:encoding(UTF-8)', $base . '/summary.csv' or die "Can't open CSV: $!";
-    my $ov = read_columns($model, $csv, $fh);
+    $ov  = read_columns($model, $csv, $fh);
+    my @exp_names = keys %$ov; #used for cleaning up db later
     close $fh;
-
+    
     my $plate_rs = $model->schema->resultset('Plate')->find({ name => $project })->as_hash;
 
     my $proj_rs = $model->schema->resultset('MiseqPlate')->find({ plate_id => $plate_rs->{id} })->as_hash;
@@ -388,12 +390,12 @@ if ($db_update) {
     for (my $ind = 0; $ind < 4; $ind++) {
         @well_names = well_builder($quads->{$ind}, @well_names);
     }
+    
     foreach my $exp (keys %{$result}) {
         my $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
-        unless ($exp_check) {
+        unless ($exp_check){
             try {
                 $model->create_miseq_experiment({
-
                     miseq_id        => $proj_rs->{id},
                     name            => $exp,
                     gene            => (split(/_/,$ov->{$exp}[0]))[0],
@@ -404,6 +406,24 @@ if ($db_update) {
             }
             catch {
                 warn "Could not create record for " . $proj_rs->{id} . ": $_";
+                $model->schema->txn_rollback;
+            };
+            $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
+        }
+        else {
+            try {
+                $model->update_miseq_experiment({
+                    id              => $exp_check->id,
+                    miseq_id        => $proj_rs->{id},
+                    name            => $exp,
+                    gene            => (split(/_/,$ov->{$exp}[0]))[0],
+                    nhej_reads      => $result->{$exp}->{nhej} || '0',
+                    total_reads     => $result->{$exp}->{total} || '1',
+                });
+                print "Updated Miseq ID: " . $proj_rs->{id} . " Experiment: " . $exp . "\n";
+            }
+            catch {
+                warn "Could not update record for " . $proj_rs->{id} . ": $_";
                 $model->schema->txn_rollback;
             };
             $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
