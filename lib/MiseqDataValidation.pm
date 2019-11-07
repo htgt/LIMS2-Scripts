@@ -106,7 +106,7 @@ sub find_lost_wells {
 sub get_well_names {
     my $miseq_exp_id      = shift;
     my $miseq_well_exp_rs = $schema->resultset('MiseqWellExperiment');
-    my @well_names        = map { $_->well->name }
+    my @well_names        = map { $_->well->well_name }
       $miseq_well_exp_rs->search( { miseq_exp_id => $miseq_exp_id } );
     return \@well_names;
 }

@@ -9,14 +9,19 @@ use base qw( Test::Class );
 use Test::More tests => 27;
 use Test::Deep;
 use Test::MockModule;
+use LIMS2::Test model => { classname => __PACKAGE__ };
 use MiseqDataValidation qw(:all);
+use Data::Dumper;
 
-sub mocked_construct_file_path {
+sub redefined_construct_file_path {
     my ( $plate_name, $i, $miseq_exp_name ) = @_;
     my $file_path =
-      "test_fixtures/quant_files/$plate_name/$miseq_exp_name/$i.txt";
+      "$Bin/../../test_fixtures/quant_files/$plate_name/$miseq_exp_name/$i.txt";
     return $file_path;
 }
+
+undef &construct_file_path;
+*MiseqDataValidation::construct_file_path = \&redefined_construct_file_path;
 
 sub test_module_import : Test(2) {
     my @subs = qw(
@@ -46,8 +51,8 @@ sub test_get_all_miseq_plates : Test(1) {
             'name'        => 'Miseq010',
             'description' => '',
             'type'        => 'MISEQ',
-            'created_by'  => '',
-            'created_at'  => '',
+            'created_by'  => 'beth',
+            'created_at'  => '2019-11-05T16:33:42',
             'wells'       => [ 'A02', 'C09', 'K09', 'O02' ]
         },
         {
@@ -55,10 +60,21 @@ sub test_get_all_miseq_plates : Test(1) {
             'name'        => 'Miseq011',
             'description' => '',
             'type'        => 'MISEQ',
-            'created_by'  => '',
-            'created_at'  => '',
-            'wells' =>
-              [ 'A01', 'B04', 'C02', 'C14', 'C17', 'E09', 'F04', 'I01', 'P09' ]
+            'created_by'  => 'beth',
+            'created_at'  => '2019-11-05T16:33:42',
+            'wells'       => [
+                '',    'A01', 'B04', 'C02', 'C14', 'C17',
+                'E09', 'F04', 'I01', 'P09'
+            ]
+        },
+        {
+            'id'          => 13579,
+            'name'        => 'Test_Plate',
+            'description' => '',
+            'type'        => 'MISEQ',
+            'created_by'  => 'beth',
+            'created_at'  => '2019-11-05T16:33:42',
+            'wells'       => []
         }
     );
     cmp_deeply( \@test_plates, bag(@expected_plates),
@@ -73,8 +89,8 @@ sub test_check_plate : Test(3) {
         'name'        => 'Miseq010',
         'description' => '',
         'type'        => 'MISEQ',
-        'created_by'  => '',
-        'created_at'  => '',
+        'created_by'  => 'beth',
+        'created_at'  => '2019-11-05T16:33:42',
         'wells'       => [ 'A02', 'C09', 'K09', 'O02' ]
     };
     check_plate($test_miseq_10);
@@ -97,10 +113,10 @@ sub test_check_plate : Test(3) {
         'name'        => 'Miseq011',
         'description' => '',
         'type'        => 'MISEQ',
-        'created_by'  => '',
-        'created_at'  => '',
+        'created_by'  => 'beth',
+        'created_at'  => '2019-11-05T16:33:42',
         'wells' =>
-          [ 'A01', 'B04', 'C02', 'C14', 'C17', 'E09', 'F04', 'I01', 'P09' ]
+          [ '', 'A01', 'B04', 'C02', 'C14', 'C17', 'E09', 'F04', 'I01', 'P09' ]
     };
     check_plate($test_miseq_11);
     ok( !-e 'Miseq011_lost_wells.txt', 'Report file not created for Miseq 11' );
@@ -133,33 +149,34 @@ sub test_get_miseq_exps : Test(4) {
             'id'              => 170,
             'miseq_id'        => 13,
             'name'            => 'CG_PDX_1_FPDM2',
-            'experiment_id'   => '',
-            'parent_plate_id' => '',
-            'gene'            => '',
-            'nhej_count'      => '',
-            'read_count'      => ''
+            'experiment_id'   => undef,
+            'parent_plate_id' => undef,
+            'gene'            => undef,
+            'nhej_count'      => undef,
+            'read_count'      => undef
         },
         {
             'id'              => 165,
             'miseq_id'        => 13,
             'name'            => 'Plate_2',
-            'experiment_id'   => '',
-            'parent_plate_id' => '',
-            'gene'            => '',
-            'nhej_count'      => '',
-            'read_count'      => ''
+            'experiment_id'   => undef,
+            'parent_plate_id' => undef,
+            'gene'            => undef,
+            'nhej_count'      => undef,
+            'read_count'      => undef
         },
         {
             'id'              => 167,
             'miseq_id'        => 13,
             'name'            => 'HUPEPD0017_1',
-            'experiment_id'   => '',
-            'parent_plate_id' => '',
-            'gene'            => '',
-            'nhej_count'      => '',
-            'read_count'      => ''
+            'experiment_id'   => undef,
+            'parent_plate_id' => undef,
+            'gene'            => undef,
+            'nhej_count'      => undef,
+            'read_count'      => undef
         }
     );
+    print Dumper( \@miseq_10_exps );
     cmp_deeply(
         \@miseq_10_exps,
         bag(@expected_miseq_10_exps),
@@ -172,31 +189,31 @@ sub test_get_miseq_exps : Test(4) {
             'id'              => 339,
             'miseq_id'        => 21,
             'name'            => 'DDD_SETD1B_2_CAC',
-            'experiment_id'   => '',
-            'parent_plate_id' => '',
-            'gene'            => '',
-            'nhej_count'      => '',
-            'read_count'      => ''
+            'experiment_id'   => undef,
+            'parent_plate_id' => undef,
+            'gene'            => undef,
+            'nhej_count'      => undef,
+            'read_count'      => undef
         },
         {
             'id'              => 340,
             'miseq_id'        => 21,
             'name'            => 'HUEDQ0501_B_KMT2C_1',
-            'experiment_id'   => '',
-            'parent_plate_id' => '',
-            'gene'            => '',
-            'nhej_count'      => '',
-            'read_count'      => ''
+            'experiment_id'   => undef,
+            'parent_plate_id' => undef,
+            'gene'            => undef,
+            'nhej_count'      => undef,
+            'read_count'      => undef
         },
         {
             'id'              => 288,
             'miseq_id'        => 21,
             'name'            => 'SETD5_2_PLATE11C',
-            'experiment_id'   => '',
-            'parent_plate_id' => '',
-            'gene'            => '',
-            'nhej_count'      => '',
-            'read_count'      => ''
+            'experiment_id'   => undef,
+            'parent_plate_id' => undef,
+            'gene'            => undef,
+            'nhej_count'      => undef,
+            'read_count'      => undef
         }
     );
     cmp_deeply(
@@ -205,7 +222,7 @@ sub test_get_miseq_exps : Test(4) {
         'Correct experiments for Miseq 11'
     );
 
-    my @no_miseq_exps          = get_miseq_exps(12345);
+    my @no_miseq_exps          = get_miseq_exps(13579);
     my @expected_no_miseq_exps = ();
     is_deeply( \@no_miseq_exps, \@expected_no_miseq_exps,
         'Returns empty list if no Miseq experiments linked to plate' );
@@ -223,11 +240,11 @@ sub test_find_lost_wells : Test(3) {
         'id'              => 165,
         'miseq_id'        => 13,
         'name'            => 'Plate_2',
-        'experiment_id'   => '',
-        'parent_plate_id' => '',
-        'gene'            => '',
-        'nhej_count'      => '',
-        'read_count'      => ''
+        'experiment_id'   => undef,
+        'parent_plate_id' => undef,
+        'gene'            => undef,
+        'nhej_count'      => undef,
+        'read_count'      => undef
     };
     my @exp_1_lost_wells          = find_lost_wells( $test_exp_1, 'Miseq010' );
     my @expected_exp_1_lost_wells = ( 'K01', 'O11' );
@@ -241,11 +258,11 @@ sub test_find_lost_wells : Test(3) {
         'id'              => 167,
         'miseq_id'        => 13,
         'name'            => 'HUPEPD0017_1',
-        'experiment_id'   => '',
-        'parent_plate_id' => '',
-        'gene'            => '',
-        'nhej_count'      => '',
-        'read_count'      => ''
+        'experiment_id'   => undef,
+        'parent_plate_id' => undef,
+        'gene'            => undef,
+        'nhej_count'      => undef,
+        'read_count'      => undef
     };
     my @exp_2_lost_wells          = find_lost_wells( $test_exp_2, 'Miseq010' );
     my @expected_exp_2_lost_wells = ('M06');
@@ -256,11 +273,11 @@ sub test_find_lost_wells : Test(3) {
         'id'              => 340,
         'miseq_id'        => 21,
         'name'            => 'HUEDQ0501_B_KMT2C_1',
-        'experiment_id'   => '',
-        'parent_plate_id' => '',
-        'gene'            => '',
-        'nhej_count'      => '',
-        'read_count'      => ''
+        'experiment_id'   => undef,
+        'parent_plate_id' => undef,
+        'gene'            => undef,
+        'nhej_count'      => undef,
+        'read_count'      => undef
     };
     my @exp_3_lost_wells = find_lost_wells( $test_exp_3, 'Miseq011' );
 
@@ -318,13 +335,10 @@ sub test_check_for_lost_well : Test(4) {
 }
 
 sub test_construct_file_path : Test(1) {
-    my $module = Test::MockModule->new('MiseqDataValidation');
-    $module->mock( 'construct_file_path', \&mocked_construct_file_path );
     my $file_path =
-      MiseqDataValidation::construct_file_path( 'Test_plate_name', 123,
-        'Test_exp_name' );
+      construct_file_path( 'Test_plate_name', 123, 'Test_exp_name' );
     my $expected_file_path =
-      'test_fixtures/quant_files/Test_plate_name/Test_exp_name/123.txt';
+"$Bin/../../test_fixtures/quant_files/Test_plate_name/Test_exp_name/123.txt";
     is( $file_path, $expected_file_path, 'File path constructed correctly' );
 
     return;
