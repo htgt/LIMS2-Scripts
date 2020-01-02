@@ -20,24 +20,37 @@ use Sub::Exporter -setup => {
           )
     ]
 };
+use Net::OpenSSH;
 
 use LIMS2::Model;
 use LIMS2::Model::Util::Miseq qw(convert_index_to_well_name);
 
-my $schema          = LIMS2::Model->new( user => 'lims2' )->schema;
+my $schema = LIMS2::Model->new( user => 'lims2' )->schema;
+
 my $quant_file_root = '/warehouse/team229_wh01/lims2_managed_miseq_data';
+my @quant_files;
 
 sub miseq_data_validator {
-    if ( !-e $quant_file_root ) {
+    if ( $ENV{LIMS2_FILE_ACCESS_SERVER} ) {
+        # This environment variable must contain a host for accessing remote files
+        get_quant_files();
+    }
+    elsif ( !-e $quant_file_root ) {
         die "Quantification files won't be found";
     }
     my @plates = get_all_miseq_plates();
-
-    #my $plate_rs = $schema->resultset('Plate');
-    #my $plate = $plate_rs->find({'name' => 'Miseq_010'})->as_hash;
     foreach my $plate (@plates) {
         check_plate($plate);
     }
+    return;
+}
+
+sub get_quant_files {
+    print "Getting quantification files...\n";
+    my $ssh = Net::OpenSSH->new( $ENV{LIMS2_FILE_ACCESS_SERVER} );
+    @quant_files = $ssh->capture(
+        "find $quant_file_root -name Quantification_of_editing_frequency.txt");
+    chomp(@quant_files);
     return;
 }
 
@@ -116,7 +129,7 @@ sub check_for_lost_well {
     my $file_path = construct_file_path( $plate_name, $i, $miseq_exp_name );
     my $well_name_to_check = convert_index_to_well_name($i);
     if ( !grep { $well_name_to_check eq $_ } @$existing_well_names ) {
-        if ( -e $file_path ) {
+        if ( ( grep { $file_path eq $_ } @quant_files ) or ( -e $file_path ) ) {
             return $well_name_to_check;
         }
     }

@@ -8,10 +8,10 @@ use lib "$Bin/../../lib";
 use base qw( Test::Class );
 use Test::More tests => 27;
 use Test::Deep;
-use Test::MockModule;
+
 use LIMS2::Test model => { classname => __PACKAGE__ };
+
 use MiseqDataValidation qw(:all);
-use Data::Dumper;
 
 sub redefined_construct_file_path {
     my ( $plate_name, $i, $miseq_exp_name ) = @_;
@@ -176,7 +176,6 @@ sub test_get_miseq_exps : Test(4) {
             'read_count'      => undef
         }
     );
-    print Dumper( \@miseq_10_exps );
     cmp_deeply(
         \@miseq_10_exps,
         bag(@expected_miseq_10_exps),
