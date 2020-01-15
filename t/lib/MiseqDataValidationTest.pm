@@ -289,45 +289,40 @@ sub test_find_lost_wells : Test(3) {
 
 sub test_get_well_names : Test(3) {
     my $exp_1_wells          = get_well_names(165);
-    my $expected_exp_1_wells = ['K09'];
+    my $expected_exp_1_wells = { 'K09' => 1 };
     is_deeply( $exp_1_wells, $expected_exp_1_wells,
         'Correct well name retrieved for test experiment 1' );
 
     my $exp_2_wells          = ( get_well_names(167) );
-    my @expected_exp_2_wells = ( 'A02', 'C09' );
-    cmp_deeply(
-        $exp_2_wells,
-        bag(@expected_exp_2_wells),
-        'Correct well names retrieved for test experiment 2'
-    );
+    my $expected_exp_2_wells = { 'A02' => 1, 'C09' => 1 };
+    is_deeply( $exp_2_wells, $expected_exp_2_wells,
+        'Correct well names retrieved for test experiment 2' );
 
     my $exp_3_wells          = ( get_well_names(340) );
-    my @expected_exp_3_wells = ( 'C02', 'F04', 'B04', '' );
-    cmp_deeply(
-        $exp_3_wells,
-        bag(@expected_exp_3_wells),
-        'Correct well names retrieved for test experiment 3'
-    );
+    my $expected_exp_3_wells = { 'C02' => 1, 'F04' => 1, 'B04' => 1, '' => 1 };
+    is_deeply( $exp_3_wells, $expected_exp_3_wells,
+        'Correct well names retrieved for test experiment 3' );
 
     return;
 }
 
 sub test_check_for_lost_well : Test(4) {
     my $lost_well_1 =
-      check_for_lost_well( 'Miseq010', 195, 'Plate_2', ['K09'] );
+      check_for_lost_well( 'Miseq010', 195, 'Plate_2', { 'K09' => 1 } );
     is( $lost_well_1, 'K01', 'Returns well name if well missing' );
 
     my $lost_well_2 =
-      check_for_lost_well( 'Miseq010', 9, 'HUPEPD0017_1', [ 'C09', 'A02' ] );
+      check_for_lost_well( 'Miseq010', 9, 'HUPEPD0017_1',
+        { 'C09' => 1, 'A02' => 1 } );
     is( $lost_well_2, undef, 'Returns undef if well found' );
 
     my $lost_well_3 =
       check_for_lost_well( 'Miseq011', 30, 'HUEDQ0501_B_KMT2C_1',
-        [ 'C02', 'F04', 'B04', '' ] );
+        { 'C02' => 1, 'F04' => 1, 'B04' => 1, '' => 1 } );
     is( $lost_well_3, undef, 'Returns undef if well found' );
 
     my $lost_well_4 =
-      check_for_lost_well( 'Miseq011', 2, 'DDD_SET1B_2_CAC', [] );
+      check_for_lost_well( 'Miseq011', 2, 'DDD_SET1B_2_CAC', {} );
     is( $lost_well_4, undef, 'Returns undef if well and file missing' );
 
     return;

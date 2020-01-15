@@ -3,6 +3,8 @@ package MiseqDataValidation;
 use strict;
 use warnings;
 
+use Net::OpenSSH;
+use Readonly;
 use Sub::Exporter -setup => {
     exports => [
         qw(
@@ -20,22 +22,23 @@ use Sub::Exporter -setup => {
           )
     ]
 };
-use Net::OpenSSH;
 
 use LIMS2::Model;
 use LIMS2::Model::Util::Miseq qw(convert_index_to_well_name);
 
 my $schema = LIMS2::Model->new( user => 'lims2' )->schema;
 
+Readonly my $WELLS_PER_PLATE => 384;
+
 my $quant_file_root = '/warehouse/team229_wh01/lims2_managed_miseq_data';
-my @quant_files;
+my $quant_files_ref = {};
 
 sub miseq_data_validator {
     if ( $ENV{LIMS2_FILE_ACCESS_SERVER} ) {
         # This environment variable must contain a host for accessing remote files
-        get_quant_files();
+        $quant_files_ref = get_quant_files();
     }
-    elsif ( !-e $quant_file_root ) {
+    elsif ( ! -e $quant_file_root ) {
         die "Quantification files won't be found";
     }
     my @plates = get_all_miseq_plates();
@@ -48,10 +51,10 @@ sub miseq_data_validator {
 sub get_quant_files {
     print "Getting quantification files...\n";
     my $ssh = Net::OpenSSH->new( $ENV{LIMS2_FILE_ACCESS_SERVER} );
-    @quant_files = $ssh->capture(
+    my @quant_files = $ssh->capture(
         "find $quant_file_root -name Quantification_of_editing_frequency.txt");
     chomp(@quant_files);
-    return;
+    return { map { $_ => 1 } @quant_files };
 }
 
 sub get_all_miseq_plates {
@@ -89,9 +92,8 @@ sub get_miseq_exps {
     my $miseq_exp_rs   = $schema->resultset('MiseqExperiment');
     if ( my $miseq_plate = $miseq_plate_rs->find( { plate_id => $plate_id } ) )
     {
-        my $miseq_plate_id = $miseq_plate->id;
         my @miseq_exps     = map { $_->as_hash }
-          $miseq_exp_rs->search( { miseq_id => $miseq_plate_id } );
+          $miseq_exp_rs->search( { miseq_id => $miseq_plate->id } );
         return @miseq_exps;
     }
     else {
@@ -103,12 +105,9 @@ sub find_lost_wells {
     my ( $miseq_exp, $plate_name ) = @_;
     my @lost_wells;
     my $existing_well_names = get_well_names( $miseq_exp->{id} );
-    foreach ( my $i = 1 ; $i < 385 ; $i++ ) {
-        if (
-            my $lost_well = check_for_lost_well(
-                $plate_name, $i, $miseq_exp->{name}, $existing_well_names
-            )
-          )
+    foreach ( my $i = 1 ; $i <= $WELLS_PER_PLATE ; $i++ ) {
+        if ( my $lost_well = check_for_lost_well(
+                $plate_name, $i, $miseq_exp->{name}, $existing_well_names ) )
         {
             push @lost_wells, $lost_well;
         }
@@ -121,15 +120,15 @@ sub get_well_names {
     my $miseq_well_exp_rs = $schema->resultset('MiseqWellExperiment');
     my @well_names        = map { $_->well->well_name }
       $miseq_well_exp_rs->search( { miseq_exp_id => $miseq_exp_id } );
-    return \@well_names;
+    return { map { $_ => 1 } @well_names };
 }
 
 sub check_for_lost_well {
     my ( $plate_name, $i, $miseq_exp_name, $existing_well_names ) = @_;
     my $file_path = construct_file_path( $plate_name, $i, $miseq_exp_name );
     my $well_name_to_check = convert_index_to_well_name($i);
-    if ( !grep { $well_name_to_check eq $_ } @$existing_well_names ) {
-        if ( ( grep { $file_path eq $_ } @quant_files ) or ( -e $file_path ) ) {
+    if ( ! exists $existing_well_names->{$well_name_to_check} ) {
+        if ( ( exists $quant_files_ref->{$file_path} ) or ( -e $file_path ) ) {
             return $well_name_to_check;
         }
     }
