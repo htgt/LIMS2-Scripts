@@ -3,7 +3,6 @@ use strict;
 use warnings;
 use Getopt::Long;
 use LIMS2::Model::Util::BaseSpace;
-use Data::Dumper;
 
 my $walkup;
 my $path = q/./;
