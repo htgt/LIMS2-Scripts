@@ -7,13 +7,13 @@ use Path::Class;
 use Getopt::Long;
 
 # Inputs:
-#   samples: csv file containing 5 columns: Experiment ID, crispr seq, crispr strand, amplicon seq, barcode range
+#   samples: csv file containing 6 columns: Experiment ID, crispr seq, crispr strand, amplicon seq, min index, max index
 #   dir    : directory containing input fastq files (1 per barcode with names containing _S<barcode number>_ and R1 or R2)
 
 # NB: Experiment ID is just a unique identifier for the combination of amplicon and crispr used.
 # It is not a LIMS2 experiment ID at this stage in development.
 
-my $crispresso = $ENV{CRISPRESSO_CMD} || "/nfs/team87/farm3_lims2_vms/software/python_local/bin/CRISPResso";
+my $crispresso = $ENV{CRISPRESSO_CMD} || "/nfs/team87/farm5/software/python_local/bin/CRISPResso";
 
 GetOptions(
     'samples=s' => \my $samples_file_name,
