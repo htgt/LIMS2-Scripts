@@ -10,7 +10,7 @@ use LIMS2::Model;
 my $model = LIMS2::Model->new( user => 'lims2' );
 
 my @output_data; 
-my @headers = ('Gene', 'Label ID', 'Clone', 'Miseq Plate', 'Forward Primer', 'Reverse Primer', 'CRISPR Sequence', 'WGE ID', 'Strand');
+my @headers = ('Label ID', 'Clone', 'Miseq Plate', 'Forward Primer', 'Reverse Primer', 'CRISPR Sequence', 'WGE ID', 'Strand');
 push @output_data, \@headers;
 my $file = $ARGV[0];
 my @input_data = read_file($file, {chomp => 1});
@@ -18,34 +18,37 @@ my $counter = 0;
 foreach my $line (@input_data) {
     $counter += 1;
     print "Working on line $counter\n";
-    my @output_row = ();
-    my ($gene, $fp_id, $clone) = split ',', $line;
-    ($gene) = $gene =~ m/([A-Z0-9]+)/;
-    ($fp_id) = $fp_id =~ m/([A-Za-z0-9_]+)/;
-    my ($well) = $fp_id =~ m/^[A-Z0-9]+_([0-9]+)[AB_]*$/;
-    $well = $well || 1;
-    if ($well < 10) {
-        $well = "0$well";
-    }
-    my $well_name = "A$well";
+    my ($fp_name, $clone) = split ',', $line;
+    # get rid of any whitespace characters
+    ($fp_name) = $fp_name =~ m/([A-Za-z0-9_]+)/;
     ($clone) = $clone =~ m/([A-Z0-9]+)/;
-    push @output_row, $gene, $fp_id, $clone;
-    my $fp_name = get_fp_name($fp_id);
-    if (! $fp_name) {
-        print "Could not find $fp_id in database!\n";
+    my @output_row = ($fp_name, $clone);
+    my $stored_fp_name = get_stored_fp_name($fp_name);
+    if (! $stored_fp_name) {
+        print "Could not find $fp_name in database!\n";
         push @output_data, \@output_row;
         next;
     }
+    if ($fp_name ne $stored_fp_name) {
+        print "$fp_name stored as $stored_fp_name in database\n";
+    }
     my $miseq_plate_name = '';
-    my $edq_name = get_edq_name($fp_name, $clone);
-    if ($edq_name) {
-        my $miseq_exp_id = get_miseq_exp_id($edq_name, $gene);
-        if ($miseq_exp_id) {
-            $miseq_plate_name = get_miseq_plate_name($miseq_exp_id);
-        }
+    my @miseq_wells = get_miseq_wells($stored_fp_name, $clone);
+    if ($miseq_wells[0]) {
+        $miseq_plate_name = $miseq_wells[0]->plate_name;
     }
     push @output_row, $miseq_plate_name;
-    my $epd_name = get_parent_name($fp_name);
+    my ($ep_well) = $fp_name =~ m/^[A-Z0-9]+_([0-9]+)[AB_]*$/;
+    if (! $ep_well) {
+        print "Could not get ep well from $fp_name!\n";
+        push @output_data, \@output_row;
+        next;
+    }
+    if ($ep_well < 10) {
+        $ep_well = "0$ep_well";
+    }
+    my $ep_well_name = "A$ep_well";
+    my $epd_name = get_parent_name($stored_fp_name);
     if (! $epd_name) {
         print "Could not get epd name for $fp_name!\n";
         push @output_data, \@output_row;
@@ -63,9 +66,9 @@ foreach my $line (@input_data) {
         push @output_data, \@output_row;
         next;
     }
-    my $well_id = get_well_id($ep_id, $well_name);
+    my $well_id = get_well_id($ep_id, $ep_well_name);
     if (! $well_id) {
-        print "Could not get well id for $fp_name, $well_name!\n";
+        print "Could not get well id for $fp_name, $ep_well_name!\n";
         push @output_data, \@output_row;
         next;
     }
@@ -105,11 +108,11 @@ foreach my $line (@input_data) {
 }
 
 my $csv = Text::CSV->new ({ binary => 1, auto_diag => 1 });
-open my $fh, ">:encoding(utf8)", "output.csv" or die "output.csv: $!";
+open my $fh, ">:encoding(utf8)", "abcam_data.csv" or die "abcam_data.csv: $!";
 $csv->say ($fh, $_) for @output_data;
-close $fh or die "output.csv: $!";
+close $fh or die "abcam_data.csv: $!";
 
-sub get_fp_name {
+sub get_stored_fp_name {
     my $fp_name = shift;
 	my $fp = $model->schema->resultset('Plate')->find( { name => $fp_name } );
     if (! $fp) {
@@ -122,41 +125,19 @@ sub get_fp_name {
     return $fp_name;
 }
 
-sub get_edq_name {
+sub get_miseq_wells {
 	my $fp_parent = shift;
     my $well_name = shift;
 	my $plate = $model->schema->resultset('Plate')->find( { name => $fp_parent } );
-	if ($plate) {
-        foreach my $well ($plate->wells) {
-            if ($well->well_name eq $well_name) {
-                my $edq_well = $well->descendant_piq;
-                if ($edq_well) {
-                    return $edq_well->plate_name;
-                }
+    foreach my $well ($plate->wells) {
+        if ($well->well_name eq $well_name) {
+            my $edq_well = $well->descendant_piq;
+            if ($edq_well) {
+                return $edq_well->descendants_of_type('MISEQ');
             }
         }
-	}
+    }
 	return;
-}
-
-sub get_miseq_exp_id {
-    my $edq_name = shift;
-    my $gene = shift;
-    my $miseq_experiment = $model->schema->resultset('MiseqExperiment')->find( { name => { like => "$edq_name%$gene%" } } );
-    if ($miseq_experiment) {
-        return $miseq_experiment->id;
-    }
-    return;
-}
-
-sub get_miseq_plate_name {
-    my $miseq_exp_id = shift;
-    my $miseq_id = $model->schema->resultset('MiseqExperiment')->find( { id => $miseq_exp_id } )->miseq_id;
-    if ($miseq_id) {
-        my $plate_id = $model->schema->resultset('MiseqPlate')->find( { id => $miseq_id } )->plate_id;
-        return $model->schema->resultset('Plate')->find( { id => $plate_id } )->name;
-    }
-    return;
 }
 
 sub get_parent_name {
@@ -179,9 +160,9 @@ sub get_ep_id {
 }
 
 sub get_well_id {
-    my $ep_id = shift;
+    my $plate_id = shift;
     my $well_name = shift;
-    my $well = $model->schema->resultset('Well')->find( { plate_id => $ep_id, name => $well_name } );
+    my $well = $model->schema->resultset('Well')->find( { plate_id => $plate_id, name => $well_name } );
     if ($well) {
         return $well->id;
     }
