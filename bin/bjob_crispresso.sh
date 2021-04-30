@@ -1,7 +1,7 @@
 #!/usr/local/bin/bash
-export PYTHONPATH=/nfs/team87/farm3_lims2_vms/software/python_local/lib/python/
-export PATH=/nfs/team87/farm3_lims2_vms/software/crispresso_dependencies/bin:$PATH
-export crispresso=${CRISPRESSO_CMD:-/nfs/team87/farm3_lims2_vms/software/python_local/bin/CRISPResso}
+export PYTHONPATH=/nfs/team87/farm5/software/python_local/lib/python/
+export PATH=/nfs/team87/farm5/software/crispresso_dependencies/bin:$PATH
+export crispresso=${CRISPRESSO_CMD:-/nfs/team87/farm5/software/python_local/bin/CRISPResso}
 single=0
 reverse=0
 offset=0
@@ -34,7 +34,7 @@ if [ ! $rev ]; then
 fi
 
 let fix=$LSB_JOBINDEX-$offset
-JOB="$crispresso -w 50 --hide_mutations_outside_window_NHEJ --save_also_png -o S${fix}_exp$name -a $amplicon -g $crispr" 
+JOB="$crispresso -w 50 --quality --hide_mutations_outside_window_NHEJ --save_also_png -o S${fix}_exp$name -a $amplicon -g $crispr"
 if [ $single -ne 0 ]; then
     if [ $reverse -ne 0 ]; then
         JOB="$JOB -r1 $rev"
@@ -44,7 +44,7 @@ if [ $single -ne 0 ]; then
 else
     JOB="$JOB -r1 $fwd -r2 $rev"
 fi
-if [ $hdr ]; then
+if [ ! -z $hdr ]; then
     JOB="$JOB -e $hdr"
 fi
 echo $LSB_JOBINDEX
