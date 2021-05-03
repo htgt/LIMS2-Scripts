@@ -397,10 +397,10 @@ if ($db_update) {
                         nhej_reads  => $result->{$exp}->{nhej} || '0',
                         total_reads => $result->{$exp}->{total} || '1',
                     });
-                print "Updated Miseq ID: " . $proj_rs->{id} . " Experiment: " . $exp . "\n";
+                print "Updated Miseq ID: $proj_rs->{id} Experiment: $exp\n";
             }
             catch {
-                warn "Could not update record for " . $proj_rs->{id} . ": $_";
+                warn "Could not update record for $proj_rs->{id}: $_";
                 $model->schema->txn_rollback;
             };
         } else {
