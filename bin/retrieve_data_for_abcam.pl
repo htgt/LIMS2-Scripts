@@ -12,6 +12,7 @@ my $model = LIMS2::Model->new( user => 'lims2' );
 my @output_data; 
 my @headers = ('Label ID', 'Clone', 'Miseq Plate', 'Forward Primer', 'Reverse Primer', 'CRISPR Sequence', 'WGE ID', 'Strand');
 push @output_data, \@headers;
+# use Text::CSV for this?
 my $file = $ARGV[0];
 my @input_data = read_file($file, {chomp => 1});
 my $counter = 0;
@@ -20,7 +21,7 @@ foreach my $line (@input_data) {
     print "Working on line $counter\n";
     my ($fp_name, $clone) = split ',', $line;
     # get rid of any whitespace characters
-    ($fp_name) = $fp_name =~ m/([A-Za-z0-9_]+)/;
+    ($fp_name) = $fp_name =~ m/(\w+)/;
     ($clone) = $clone =~ m/([A-Z0-9]+)/;
     my @output_row = ($fp_name, $clone);
     my $stored_fp_name = get_stored_fp_name($fp_name);
