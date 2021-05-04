@@ -390,7 +390,20 @@ if ($db_update) {
     }
     foreach my $exp (keys %{$result}) {
         my $exp_check = $model->schema->resultset('MiseqExperiment')->find({ miseq_id => $proj_rs->{id}, name => $exp });
-        unless ($exp_check) {
+        if ($exp_check) {
+            try {
+                $model->update_miseq_experiment({
+                        id          => $exp_check->id,
+                        nhej_reads  => $result->{$exp}->{nhej} || '0',
+                        total_reads => $result->{$exp}->{total} || '1',
+                    });
+                print "Updated Miseq ID: $proj_rs->{id} Experiment: $exp\n";
+            }
+            catch {
+                warn "Could not update record for $proj_rs->{id}: $_";
+                $model->schema->txn_rollback;
+            };
+        } else {
             try {
                 $model->create_miseq_experiment({
 
