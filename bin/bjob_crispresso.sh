@@ -18,8 +18,9 @@ while getopts "rso:a:g:n:e:" opt; do
     e) hdr=$OPTARG ;;
     esac
 done
-fwd=`find . -maxdepth 1 -name "*_S${LSB_JOBINDEX}_*R1*"`
-rev=`find . -maxdepth 1 -name "*_S${LSB_JOBINDEX}_*R2*"`
+let fix=$LSB_JOBINDEX+$offset
+fwd=`find . -maxdepth 1 -name "*_S${fix}_*R1*"`
+rev=`find . -maxdepth 1 -name "*_S${fix}_*R2*"`
 if [ ! $amplicon ]; then
     die "No amplicon specified"
 fi
@@ -33,8 +34,7 @@ if [ ! $rev ]; then
     end "Could not find reverse file"
 fi
 
-let fix=$LSB_JOBINDEX-$offset
-JOB="$crispresso -w 50 --quality --hide_mutations_outside_window_NHEJ --save_also_png -o S${fix}_exp$name -a $amplicon -g $crispr"
+JOB="$crispresso -w 50 --quality --hide_mutations_outside_window_NHEJ --save_also_png -o S${LSB_JOBINDEX}_exp$name -a $amplicon -g $crispr"
 if [ $single -ne 0 ]; then
     if [ $reverse -ne 0 ]; then
         JOB="$JOB -r1 $rev"
