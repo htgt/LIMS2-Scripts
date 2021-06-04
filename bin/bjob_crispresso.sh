@@ -18,9 +18,9 @@ while getopts "rso:a:g:n:e:" opt; do
     e) hdr=$OPTARG ;;
     esac
 done
-let fix=$LSB_JOBINDEX+$offset
-fwd=`find . -maxdepth 1 -name "*_S${fix}_*R1*"`
-rev=`find . -maxdepth 1 -name "*_S${fix}_*R2*"`
+let illumina_index=$LSB_JOBINDEX+$offset
+fwd=`find . -maxdepth 1 -name "*_S${illumina_index}_*R1*"`
+rev=`find . -maxdepth 1 -name "*_S${illumina_index}_*R2*"`
 if [ ! $amplicon ]; then
     die "No amplicon specified"
 fi
