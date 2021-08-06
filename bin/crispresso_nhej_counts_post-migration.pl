@@ -89,10 +89,10 @@ sub file_handling {
 }
 
 sub frameshift_check {
-    my ($experiments, @common_read) = @_;
+    my ($header_indexes, @common_read) = @_;
     my $fs_check = 0;
-    if ($common_read[2] eq 'True' ) {
-        $fs_check = ($common_read[5] + $common_read[6]) % 3;
+    if ($common_read[$header_indexes->{nhej}] eq 'True' ) {
+        $fs_check = ($common_read[$header_indexes->{n_deleted}] + $common_read[$header_indexes->{n_inserted}]) % 3;
     }
     return $fs_check;
 }
@@ -205,20 +205,22 @@ for (my $i = 1; $i < 385; $i++) {
             open ($fh, '<:encoding(UTF-8)', $read) or die "$!";
             chomp(my @lines  = <$fh>);
             close $fh;
+            my $header = shift(@lines);
+            my %head = header_hash( $header );
             $experiments->{$exp}->{$i}->{classification} = 'Not Called';
             $experiments->{$exp}->{$i}->{frameshifted} = 0;
 
-            if (scalar @lines > 3) {
-                my @mixed_read = split(/\t/, $lines[3]);
+            if (scalar @lines >= 3) {
+                my @mixed_read = split(/\t/, $lines[2]);
                 my $mixed_check = $mixed_read[$#mixed_read];
                 if ($mixed_check >= 5) {
                     $experiments->{$exp}->{$i}->{frameshifted} = 0;
                     $experiments->{$exp}->{$i}->{classification} = 'Mixed';
                 } else {
-                    my @first_most_common = split(/\t/, $lines[1]);
-                    my @second_most_common = split(/\t/, $lines[2]);
+                    my @first_most_common = split(/\t/, $lines[0]);
+                    my @second_most_common = split(/\t/, $lines[1]);
 
-                    my $fs_check = frameshift_check($experiments, @first_most_common) + frameshift_check($experiments, @second_most_common);
+                    my $fs_check = frameshift_check(\%head, @first_most_common) + frameshift_check(\%head, @second_most_common);
                     if ($fs_check != 0) {
                         $experiments->{$exp}->{$i}->{classification} = 'Not Called';
                         $experiments->{$exp}->{$i}->{frameshifted} = 1;
@@ -242,9 +244,7 @@ for (my $i = 1; $i < 385; $i++) {
             }
             my $limit = 10;
             my $counter = 0;
-            my $header = shift(@lines);    #grab the header line that holds the titles of the columns
 
-            my %head = header_hash( $header );
             while (@lines) {
                 my $line = shift @lines;
                 my @elements = split /\t/ , $line;
